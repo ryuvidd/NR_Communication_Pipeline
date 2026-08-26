@@ -7,6 +7,10 @@ from RateMatching import *
 import logging
 from CBconcat import *
 from Scrambling import *
+from QAMModulators import *
+from LayerMapping import *
+from DMRSGeneration import *
+from ResourceMapping import *
 
 logging.basicConfig(
     level=logging.INFO,
@@ -16,13 +20,21 @@ logging.basicConfig(
 @dataclass
 class MainConfig:
     nPRB: int
-    nSymbolsPerPRB: int
-    nDMRSPerPRB: int
+    allocatedPRB: list
+    allocatedPDSCHSymbols: list
+    allocatedDMRSPerPRB: list[tuple]
+    nOFDMSymbolsPerSlot: int
     Qm: int
     R: float
     nLayer: int
-    n_RNTI: int
-    n_ID: int
+    nCodeWord: int
+    nRNTI: int
+    nID: int
+    ModulatorType: QAM_MODULATION
+    slotNumInFrame: int
+    N_DMRS_ID: int
+    lambda_bar: int
+    n_SCID:int
 
 class Transmitter():
     def __init__(self, config: MainConfig):
@@ -30,9 +42,9 @@ class Transmitter():
         self.config = config
         self.TBSGenerator = TBSGenerator()
         temp_config = TBSGeneratorConfig(
-            nPRB = config.nPRB,
-            nSymbolsPerPRB = config.nSymbolsPerPRB,
-            nDMRSPerPRB = config.nDMRSPerPRB,
+            numAllocatedPRB = len(config.allocatedPRB),
+            numPDSCHSymbolsPerPRB = len(config.allocatedPDSCHSymbols),
+            numDMRSPerPRB = len(config.allocatedDMRSPerPRB),
             Qm = config.Qm,
             R = config.R,
             nLayer = config.nLayer
@@ -61,8 +73,32 @@ class Transmitter():
         )
         self.RateMatcher = RateMatcher(temp_config)
         self.CodeBlockConcatenator = CodeBlockConcatenator()
-        self.Scrambler = PDSCHScrambler(n_RNTI=config.n_RNTI, q=0, n_ID=config.n_ID)
-
+        self.Scrambler = PDSCHScrambler(config.nRNTI, config.nCodeWord, config.nID)
+        self.QAMModulator = SelectModulator(config.ModulatorType)
+        self.LayerMapper = LayerMapper(config.nLayer)
+        temp_config = PDSCH_DMRS_GeneratorConfig(
+            nOFDMSymbolsPerSlot = config.nOFDMSymbolsPerSlot,
+            allocatedDMRSPerPRB = config.allocatedDMRSPerPRB,
+            allocatedPRB = config.allocatedPRB,
+            slotNumInFrame = config.slotNumInFrame,
+            N_DMRS_ID = config.N_DMRS_ID,
+            lambda_bar = config.lambda_bar,
+            n_SCID = config.n_SCID
+        )
+        self.DMRSGenerator = PDSCH_DMRS_Generator(temp_config)
+        temp_config = ResourceMappingConfig(
+            nPRB = config.nPRB,
+            allocatedPRB = config.allocatedPRB,
+            allocatedPDSCHSymbols = config.allocatedPDSCHSymbols,
+            allocatedDMRSPerPRB = config.allocatedDMRSPerPRB,
+            nLayer = config.nLayer,
+            nOFDMSymbolsPerSlot = config.nOFDMSymbolsPerSlot,
+            slotNumInFrame = config.slotNumInFrame,
+            N_DMRS_ID = config.N_DMRS_ID,
+            lambda_bar = config.lambda_bar,
+            n_SCID = config.n_SCID
+        )
+        self.ResourceMapper = ResourceMapper(temp_config)
 
     def process(self) -> np.ndarray:
         rng = np.random.default_rng()
@@ -77,22 +113,37 @@ class Transmitter():
         Codeword = self.CodeBlockConcatenator.process(RateMatchedCodeBlocks)
         ScrambledBits = self.Scrambler.process(Codeword)
         logging.info("======== Completed scrambling ========")
-        return ScrambledBits
+        QAMSymbols = self.QAMModulator.modulate(ScrambledBits)
+        logging.info("======== Completed QAM mapping ========")
+        LayerMappedSymbols = self.LayerMapper.process(QAMSymbols)
+        logging.info("======== Completed layer mapping ========")
+        DMRSs = self.DMRSGenerator.process()
+        grid = self.ResourceMapper.process(LayerMappedSymbols, DMRSs)
+        logging.info("======== Completed constructing resource grid ========")
+        return grid
     
 if __name__ == '__main__':
     mainConfig = MainConfig(
         nPRB = 50,
-        nSymbolsPerPRB = 12,
-        nDMRSPerPRB =12,
-        Qm = 4,
+        allocatedPRB = [a for a in range(5,15)],
+        allocatedPDSCHSymbols = [a for a in range(2,14)],
+        allocatedDMRSPerPRB = [(0,2), (2,2), (4,2), (6,2), (8,2), (10,2)],
+        nOFDMSymbolsPerSlot = 14,
+        Qm = 2,
         R = 0.5,
         nLayer = 1,
-        n_RNTI = 99,
-        n_ID = 42,
+        nCodeWord = 1,
+        nRNTI = 99,
+        nID = 42,
+        ModulatorType = QAM_MODULATION.QPSK_GRAY,
+        slotNumInFrame = 0,
+        N_DMRS_ID = 100,
+        lambda_bar = 0,
+        n_SCID = 0
     )
 
     ThisTransmitter = Transmitter(mainConfig)
-    Codeword = ThisTransmitter.process()
+    TransmittedWaveForm = ThisTransmitter.process()
     logging.info("===== Success =====")
 
     

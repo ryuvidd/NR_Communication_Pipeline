@@ -18,9 +18,9 @@ TBS_TABLE = [
 
 @dataclass
 class TBSGeneratorConfig:
-    nPRB: int
-    nSymbolsPerPRB: int
-    nDMRSPerPRB: int
+    numAllocatedPRB: int
+    numPDSCHSymbolsPerPRB: int
+    numDMRSPerPRB: int
     Qm: int
     R: float
     nLayer: int
@@ -34,12 +34,12 @@ class TBSGenerator():
     
     def generate(self, config: TBSGeneratorConfig):
         ## Following TS38.214 clause 5.1.3.2 (PDSCH) and 6.1.4.2 (PUSCH) ##
-        N_RE = config.nPRB * min(156, (config.nSymbolsPerPRB * 12 - config.nDMRSPerPRB))
+        N_RE = config.numAllocatedPRB * min(156, (config.numPDSCHSymbolsPerPRB * 12 - config.numDMRSPerPRB))
         G = N_RE * config.Qm * config.nLayer
         N_info = G * config.R
         if N_info <= 3824:
             n = max(3, math.floor(math.log2(N_info)) - 6)
-            N_info_prime = max(24, 2**n * math.floor*(N_info / 2**n))
+            N_info_prime = max(24, 2**n * math.floor(N_info / 2**n))
             TBS = self.__TBS_table5_1_3_2_1__(N_info_prime)
         else:
             n = math.floor(math.log2(N_info - 24)) - 5
@@ -53,15 +53,14 @@ class TBSGenerator():
                     C = 1
             TBS = 8 * C * math.ceil((N_info_prime + 24) / (8 * C)) - 24
         return {"TBS": TBS, 
-                "C": C, 
                 "G": G
         }
     
 if __name__ == '__main__':
     config = TBSGeneratorConfig(
-        nPRB = 50,
-        nSymbolsPerPRB = 12,
-        nDMRSPerPRB = 12,
+        numAllocatedPRB = 50,
+        numPDSCHSymbolsPerPRB = 12,
+        numDMRSPerPRB = 12,
         Qm = 4,
         R = 0.5,
         nLayer = 1
