@@ -78,7 +78,7 @@ class CodeBlockSegmenter():
         }    
         return LDPCBlockParam
     
-    def generateCodeBlocks(self, TransportBlock: np.ndarray, param: dict) -> list:
+    def process(self, TransportBlock: np.ndarray, param: dict) -> list:
         TBwithCRC, crc = self.CRC24A.attachCRC(TransportBlock)
         B = len(TBwithCRC)
 
@@ -101,11 +101,40 @@ class CodeBlockSegmenter():
             codeBlocks.append(codeBlock)
         return codeBlocks
     
+class CodeBlockCombiner():
+    def __init__(self, C):
+        if C > 1:
+            self.CRC24B = CRC(L="24B")
+        self.CRC24A = CRC(L="24A")
+
+    def process(self, EstimatedCodewords: list[np.ndarray]) -> tuple:
+        retransmissionCodeBlockIndices = []
+        EstimatedTransportBlock = np.array(-1)
+        if len(EstimatedCodewords) > 1:
+            ConcatentedCodeBlock = []
+            for r,code_block in enumerate(EstimatedCodewords):
+                if self.CRC24B.check(code_block):
+                    ConcatentedCodeBlock.append(code_block[:-self.CRC24B.CRCLength])
+                else:
+                    retransmissionCodeBlockIndices.append(r)
+            if len(retransmissionCodeBlockIndices) == 0:
+                LastCRCCheckCodeBlock = np.concatenate(ConcatentedCodeBlock)
+            else:
+                return retransmissionCodeBlockIndices, EstimatedTransportBlock
+        
+        LastCRCCheckCodeBlock = EstimatedCodewords[0]
+        if self.CRC24A.check(LastCRCCheckCodeBlock):
+            EstimatedTransportBlock = LastCRCCheckCodeBlock[:-self.CRC24A.CRCLength]
+        else:
+            retransmissionCodeBlockIndices.append(-1)
+        return retransmissionCodeBlockIndices, EstimatedTransportBlock
+        
+    
 if __name__ == "__main__":
     config = TBSGeneratorConfig(
-        nPRB = 50,
-        nSymbolsPerPRB = 12,
-        nDMRSPerPRB = 12,
+        numAllocatedPRB = 50,
+        numPDSCHSymbolsPerPRB = 12,
+        numDMRSPerPRB = 12,
         Qm = 4,
         R = 0.5,
         nLayer = 1
@@ -117,5 +146,6 @@ if __name__ == "__main__":
     ThisCodeBlockSegmenter = CodeBlockSegmenter(baseGraph)
     LDPCBlockParam = ThisCodeBlockSegmenter.getLDPCBlockParam(TBS)
 
-    TransportBlock = [1] * TBS
-    CodeBlocks = ThisCodeBlockSegmenter.generateCodeBlocks(TransportBlock, LDPCBlockParam)
+    TransportBlock = np.array([1] * TBS)
+    CodeBlocks = ThisCodeBlockSegmenter.process(TransportBlock, LDPCBlockParam)
+    mask_NULLs = [(CodeBlocks[i] == -1) for i in range(len(CodeBlocks))]

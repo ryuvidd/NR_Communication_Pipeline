@@ -68,5 +68,4 @@ if __name__ == '__main__':
     ThisTBSGenerator = TBSGenerator()
     param = ThisTBSGenerator.generate(config)
     print('TBS: ', param["TBS"])
-    print('C: ', param["C"])
     print('G: ', param["G"])
