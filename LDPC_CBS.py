@@ -113,16 +113,23 @@ class CodeBlockCombiner():
         if len(EstimatedCodewords) > 1:
             ConcatentedCodeBlock = []
             for r,code_block in enumerate(EstimatedCodewords):
-                if self.CRC24B.check(code_block):
-                    ConcatentedCodeBlock.append(code_block[:-self.CRC24B.CRCLength])
+                # Filler bits are represented as -1 after LDPC decoding and
+                # are not part of the CRC-protected code block.
+                code_block_without_fillers = code_block[code_block != -1]
+                if self.CRC24B.check(code_block_without_fillers):
+                    ConcatentedCodeBlock.append(code_block_without_fillers[:-self.CRC24B.CRCLength])
                 else:
                     retransmissionCodeBlockIndices.append(r)
             if len(retransmissionCodeBlockIndices) == 0:
                 LastCRCCheckCodeBlock = np.concatenate(ConcatentedCodeBlock)
             else:
                 return retransmissionCodeBlockIndices, EstimatedTransportBlock
-        
-        LastCRCCheckCodeBlock = EstimatedCodewords[0]
+
+        else:
+            # For C=1, remove LDPC filler placeholders before checking the
+            # transport-block CRC.
+            LastCRCCheckCodeBlock = EstimatedCodewords[0][EstimatedCodewords[0] != -1]
+
         if self.CRC24A.check(LastCRCCheckCodeBlock):
             EstimatedTransportBlock = LastCRCCheckCodeBlock[:-self.CRC24A.CRCLength]
         else:

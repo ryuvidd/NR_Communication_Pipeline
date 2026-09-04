@@ -157,7 +157,10 @@ class LDPCEncoder():
             # Concatenate code block with parities and apply NULL, following step 2
             fullCodeBlock = np.concatenate([NewcodeBlock, w_blocks.reshape(-1)])
             fullCodeBlock = fullCodeBlock.astype(np.int8)
-            fullCodeBlock[:self.K][fillerMask] = -1
+            # Boolean indexing after a slice creates a temporary copy.  Use
+            # absolute indices so filler markers are restored in-place before
+            # rate matching skips them.
+            fullCodeBlock[np.flatnonzero(fillerMask)] = -1
             encodedCodeBlock = fullCodeBlock.copy()[2 * self.Z_c:]
 
             if validityCheckFlag:
@@ -248,6 +251,16 @@ class LDPCDecoder():
         EstimatedCodewords = []
         for cb_index, encoded_llrs in enumerate(EncodedLLRs):
             L = np.concatenate((np.zeros(2 * self.Z_c), encoded_llrs)).reshape(-1, self.Z_c)
+            if self.fillerMask is not None:
+                mask = self.fillerMask[cb_index]
+                if len(mask) != self.K:
+                    raise ValueError(f"Filler mask length does not match decoded block {cb_index}.")
+
+                # Filler bits are known zeros (TS 38.212 rate recovery). They
+                # are not transmitted, so replace their zero LLRs with a
+                # strong positive prior before iterative decoding.
+                L.reshape(-1)[np.flatnonzero(mask)] = 1e12
+
             R = np.zeros((self.H_BG.shape[0], self.H_BG.shape[1], self.Z_c), dtype=np.float64)
             converged = False
 
@@ -266,8 +279,6 @@ class LDPCDecoder():
             estimated_codeword = x_hard[:self.num_info_block].reshape(-1).astype(np.int8)
             if self.fillerMask is not None:
                 mask = self.fillerMask[cb_index]
-                if len(estimated_codeword) != len(mask):
-                    raise ValueError(f"Filler mask length does not match decoded block {cb_index}.")
                 estimated_codeword[mask] = -1
             EstimatedCodewords.append(estimated_codeword)
         
