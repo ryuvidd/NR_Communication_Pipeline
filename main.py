@@ -1,11 +1,7 @@
 from Transmitter import *
 from Receiver import *
-
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(levelname)s - %(message)s"
-)
-
+from Channel import *
+from util import *
 
 if __name__ == '__main__':
     
@@ -26,7 +22,8 @@ if __name__ == '__main__':
         slotNumInFrame = 0,
         N_DMRS_ID = 100,
         lambda_bar = 0,
-        n_SCID = 0
+        n_SCID = 0,
+        NFFT = 1024
     )
 
     RxConfig = ReceiverConfig(
@@ -46,19 +43,33 @@ if __name__ == '__main__':
         slotNumInFrame = 0,
         N_DMRS_ID = 100,
         lambda_bar = 0,
-        n_SCID = 0
+        n_SCID = 0,
+        NFFT = 1024
+    )
+
+    ChannelConfig = RayleighFadingConfig(
+        velocity = 15,
+        carrierFrequency = 2.5e9,
+        delays_ns = [0, 100, 300],
+        delayPower_dB = [0, -3, -6],
+        Ts = 1 / (1024 * 30e3),         # 1 / Fs where Fs = NFFT * delta_f
+        T_slot = 1 / 30e3,              # T_slot = 1 / delta_f
+        nOFDMSymbolsPerSlot = 14
     )
     
     rng = np.random.default_rng(34)
     InformationData = rng.integers(0, 2, size=100000, dtype=np.uint8)
 
     ThisTransmitter = Transmitter(TxConfig)
-    TransmittedWaveForm = ThisTransmitter.process(InformationData)
+    TransmittedSymbols = ThisTransmitter.process(InformationData)
     logging.info("...................................")
     logging.info("...... Transmitted Wave Form ......")
+    Channel = RayleighFadingChannel(ChannelConfig)
+    ChannelOutputs = Channel.process(TransmittedSymbols)
     logging.info("...................................")
     ThisReceiver = Receiver(RxConfig)
-    retransmissionCodeBlockIndices, EstimatedTransportBlock = ThisReceiver.process(TransmittedWaveForm)
+    retransmissionCodeBlockIndices, EstimatedTransportBlock = ThisReceiver.process(ChannelOutputs)
+    
     if len(retransmissionCodeBlockIndices) == 0:
         TransportBlock = InformationData[:ThisTransmitter.meta["TBS"]]
         if np.allclose(TransportBlock, EstimatedTransportBlock):

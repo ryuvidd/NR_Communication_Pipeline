@@ -2,6 +2,8 @@ from util import *
 from dataclasses import dataclass
 from OFDMModulation import *
 from ResourceMapping import *
+from ChannelEstimator import *
+from Equalizer import *
 from LayerMapping import *
 from QAMMapping import *
 from Scrambling import *
@@ -28,7 +30,8 @@ class ReceiverConfig:
     slotNumInFrame: int
     N_DMRS_ID: int
     lambda_bar: int
-    n_SCID:int
+    n_SCID: int
+    NFFT: int
 
 class Receiver():
     def __init__(self, config: ReceiverConfig):
@@ -58,7 +61,7 @@ class Receiver():
             nPRB = config.nPRB,
             nOFDMSymbolsPerSlot = config.nOFDMSymbolsPerSlot,
             SubcarrierSpacing = config.SubCarrierSpacing,
-            NFFT = 1024
+            NFFT = config.NFFT
         )
         self.OFDMDemodulator = OFDMDemodulator(temp_config)
         temp_config = ResourceMappingConfig(
@@ -84,6 +87,14 @@ class Receiver():
             n_SCID = config.n_SCID
         )
         self.DMRSGenerator = PDSCH_DMRS_Generator(temp_config)
+        temp_config = ChannelEstimatorConfig(
+            allocatedPRB = config.allocatedPRB,
+            allocatedPDSCHSymbols = config.allocatedPDSCHSymbols,
+            allocatedDMRSPerPRB = config.allocatedDMRSPerPRB,
+            RETypeGrid = self.ResourceDemapper.RETypeGrid
+        )
+        self.ChannelEstimator = LSEstimator(temp_config)
+        self.Equalizer = ZeroForcingEqualizer(config.allocatedPRB, config.allocatedPDSCHSymbols)
         self.LayerDemapper = LayerMapper(config.nLayer)
         self.QAMDemapper = QAMDemapper(config.Qm)
         self.Descrambler = PDSCHDescrambler(config.nRNTI, config.nCodeWord, config.nID)
@@ -105,13 +116,14 @@ class Receiver():
         self.LDPCDecoder = LDPCDecoder(temp_config, 100, self.meta["mask_NULLs"])
         self.CodeBlockCombiner = CodeBlockCombiner(self.meta["LDPCBlockParam"]["C"])
 
-    def process(self, ReceivedSignal: np.ndarray) -> tuple:
+    def process(self, ReceivedSignal: list[np.ndarray]) -> tuple:
         EstimatedGrid = self.OFDMDemodulator.process(ReceivedSignal)
         logging.info("======== Completed restructing resource grid ========")
-        EstimatedLayerMappedSymbols, ReceivedDMRS = self.ResourceDemapper.process(EstimatedGrid)
-        logging.info("======== Completed restrucing layered symbols ========")
         DMRSs = self.DMRSGenerator.process()
-        # Insert channel estimation and equalization here #
+        EstimatedChannel = self.ChannelEstimator.process(EstimatedGrid, DMRSs)
+        EqualizedGrid = self.Equalizer.process(EstimatedChannel, EstimatedGrid)
+        EstimatedLayerMappedSymbols, ReceivedDMRS = self.ResourceDemapper.process(EqualizedGrid)
+        logging.info("======== Completed restrucing layered symbols ========")
         EstimatedSymbols = EstimatedLayerMappedSymbols
         EstimatedQAMSymbols = self.LayerDemapper.process(EstimatedSymbols)
         logging.info("======== Completed estimating QAM symbols ========")
@@ -126,28 +138,3 @@ class Receiver():
         retransmissionCodeBlockIndices, EstimatedTransportBlock = self.CodeBlockCombiner.process(EstimatedCodeBlocks)
         logging.info("======== Completed estimating transport block ========")
         return retransmissionCodeBlockIndices, EstimatedTransportBlock
-    
-if __name__ == "__main__":
-    print('yeah')
-    # config = ReceiverConfig(
-    #     nPRB = 50,
-    #     allocatedPRB = [a for a in range(5,15)],
-    #     allocatedPDSCHSymbols = [a for a in range(2,14)],
-    #     allocatedDMRSPerPRB = [(0,2), (2,2), (4,2), (6,2), (8,2), (10,2)],
-    #     nOFDMSymbolsPerSlot = 14,
-    #     SubCarrierSpacing = int(30e3),
-    #     Qm = 2,
-    #     R = 0.5,
-    #     nLayer = 1,
-    #     nCodeWord = 1,
-    #     nRNTI = 99,
-    #     nID = 42,
-    #     slotNumInFrame = 0,
-    #     N_DMRS_ID = 100,
-    #     lambda_bar = 0,
-    #     n_SCID = 0
-    # )
-
-    # ThisReceiver = Receiver(config)
-    # TransmittedWaveForm = ThisReceiver.process()
-    # logging.info("===== Success =====")

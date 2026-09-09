@@ -42,13 +42,13 @@ class OFDMModulator:
 
         return N_CP
 
-    def process(self, grid: np.ndarray) -> np.ndarray:
+    def process(self, grid: np.ndarray) -> list[np.ndarray]:
         ## following TS38.211 clause 5.3.1, assuming k0 is zero ##
 
         if grid.shape != (self.N_SC, self.L):
             raise ValueError(f"Expected grid shape ({self.N_SC}, {self.L}), got {grid.shape}")
 
-        waveForm = []
+        TransmittedSymbols = []
 
         for l in range(self.L):
 
@@ -62,9 +62,9 @@ class OFDMModulator:
             ModulatedSamples = np.fft.ifft(centeredSubcarrier)
             cp_length_samples = self.N_CP[l]
             InsertedCP = np.concatenate([ModulatedSamples[-cp_length_samples:], ModulatedSamples])
-            waveForm.append(InsertedCP)
-        SampledTransmittedWave = np.concatenate(waveForm)
-        return SampledTransmittedWave
+            TransmittedSymbols.append(InsertedCP)
+        
+        return TransmittedSymbols
 
 class OFDMDemodulator:
 
@@ -98,21 +98,22 @@ class OFDMDemodulator:
 
         return N_CP
     
-    def process(self, ReceivedSignal: np.ndarray) -> np.ndarray:
+    def process(self, ReceivedSignal: list[np.ndarray]) -> np.ndarray:
         EstimatedGrid = np.zeros((self.N_SC, self.L), dtype=complex)
 
-        start_sample = 0
-        for l in range(self.L):
+        for l,receivedSymbol in enumerate(ReceivedSignal):
             cp_length_samples = self.N_CP[l]
-            symbol_length = cp_length_samples + self.NFFT
-            receivedSymbol = ReceivedSignal[start_sample:start_sample + symbol_length]
-            usefulSymbol = receivedSymbol[cp_length_samples:]
+            if len(receivedSymbol) < cp_length_samples + self.NFFT:
+                raise ValueError(
+                    f"OFDM symbol {l} is too short: expected at least {cp_length_samples + self.NFFT} samples, got {len(receivedSymbol)}."
+                )
+            usefulSymbol = receivedSymbol[cp_length_samples:cp_length_samples + self.NFFT]
 
-            X_hat = np.fft.fft(usefulSymbol)
+            X_hat = np.fft.fft(usefulSymbol, n=self.NFFT)
             X_centered = np.fft.fftshift(X_hat)
             start_bin = (self.NFFT // 2 - self.N_SC // 2)
             EstimatedGrid[:, l] = X_centered[start_bin: start_bin + self.N_SC]
-            start_sample += symbol_length
+
         return EstimatedGrid
 
 if __name__ == "__main__":
@@ -125,10 +126,10 @@ if __name__ == "__main__":
 
     grid = np.random.rand(config.nPRB*12, config.nOFDMSymbolsPerSlot) + 1j*np.random.rand(config.nPRB*12, config.nOFDMSymbolsPerSlot)
     ThisOFDMModulator = OFDMModulator(config)
-    TxWave = ThisOFDMModulator.process(grid)
+    TransmittedSymbols = ThisOFDMModulator.process(grid)
 
     ThisOFDMDemodulator = OFDMDemodulator(config)
-    EstimatedGrid = ThisOFDMDemodulator.process(TxWave)
+    EstimatedGrid = ThisOFDMDemodulator.process(TransmittedSymbols)
     print("Maximum absolute difference: ", np.max(np.abs(grid - EstimatedGrid)))
     print("No significant error: ", np.allclose(grid, EstimatedGrid))
     
