@@ -12,18 +12,23 @@ class RayleighFadingConfig:
     nOFDMSymbolsPerSlot: int
 
 class NoiseMixer():
-    def __init__(self) -> None:
-        self.VarNoises = []
-
-    def process(self, signal: np.ndarray, SNR: float) -> np.ndarray:
+    def process(self, ChannelOutputSymbols: list[np.ndarray], SNR: float) -> tuple:
+        ChannelOutput = []
         SNRlinear = 10 ** (SNR / 10)
-        SignalPower = np.mean(np.abs(signal) ** 2, axis=0)
+
+        SignalPower = np.zeros(len(ChannelOutputSymbols))
+        for l,symbol in enumerate(ChannelOutputSymbols):
+            SignalPower[l] = np.mean(np.abs(symbol) ** 2)
+        SignalPower = np.mean(SignalPower[SignalPower > 0])
         NoisePower = SignalPower / SNRlinear
-        Noise = np.dot((np.random.randn(signal.shape[0], signal.shape[1]) + 1j * np.random.randn(signal.shape[0], signal.shape[1])), np.diag(np.sqrt(NoisePower / 2)))
-        self.Noise = Noise
-        self.VarNoises.append(np.diag(NoisePower))
-        ChannelOutput = signal + Noise
-        return ChannelOutput
+        VarNoise = NoisePower
+        
+        for l,symbol in enumerate(ChannelOutputSymbols):
+            Noise = np.sqrt(NoisePower / 2) * (np.random.randn(symbol.size) + 1j * np.random.randn(symbol.size))
+            self.Noise = Noise
+            ChannelOutput.append(symbol + Noise)
+
+        return ChannelOutput, VarNoise
 
 class RayleighFadingChannel():
     def __init__(self, config:RayleighFadingConfig):
@@ -121,30 +126,30 @@ if __name__ == '__main__':
 
 
     
-    from dataclasses import dataclass
+    # from dataclasses import dataclass
     
-    @dataclass
-    class AWGNChannelConfig():
-        SNR: int = -6
-        NumMC: int = 100000
-        SeqLength: int = 10
+    # @dataclass
+    # class AWGNChannelConfig():
+    #     SNR: int = -6
+    #     NumMC: int = 100000
+    #     SeqLength: int = 10
 
-    class TestAWGNChannel():
-        def __init__(self, config) -> None:
-            self.NumMC = config.NumMC
-            self.SeqLength = config.SeqLength
-            self.SNR = config.SNR
-            self.NoiseMixer = NoiseMixer()
+    # class TestAWGNChannel():
+    #     def __init__(self, config) -> None:
+    #         self.NumMC = config.NumMC
+    #         self.SeqLength = config.SeqLength
+    #         self.SNR = config.SNR
+    #         self.NoiseMixer = NoiseMixer()
 
-        def run(self):
-            symbols = np.random.randn(self.NumMC, self.SeqLength) + np.random.randn(self.NumMC, self.SeqLength) * 1j
-            NoisySymbols= self.NoiseMixer.process(symbols, self.SNR)
-            NoisePower = np.mean(np.abs(self.NoiseMixer.Noise) ** 2, axis=0)
-            SymbolPower = np.mean(np.abs(symbols) ** 2, axis=0)
-            EstimatedSNR = 10 * np.log10(SymbolPower / NoisePower)
-            SNRError = EstimatedSNR - self.SNR
-            return SNRError
+    #     def run(self):
+    #         symbols = np.random.randn(self.NumMC, self.SeqLength) + np.random.randn(self.NumMC, self.SeqLength) * 1j
+    #         NoisySymbols= self.NoiseMixer.process(symbols, self.SNR)
+    #         NoisePower = np.mean(np.abs(self.NoiseMixer.Noise) ** 2, axis=0)
+    #         SymbolPower = np.mean(np.abs(symbols) ** 2, axis=0)
+    #         EstimatedSNR = 10 * np.log10(SymbolPower / NoisePower)
+    #         SNRError = EstimatedSNR - self.SNR
+    #         return SNRError
 
-    config1 = AWGNChannelConfig()
-    SNRError = TestAWGNChannel(config1).run()
-    print("SNR Error: {}".format(SNRError))
+    # config1 = AWGNChannelConfig()
+    # SNRError = TestAWGNChannel(config1).run()
+    # print("SNR Error: {}".format(SNRError))

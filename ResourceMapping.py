@@ -93,7 +93,7 @@ class ResourceDemapper():
         
         return RETypegrid
 
-    def process(self, EstimatedGrid: np.ndarray) -> tuple[list[np.ndarray], dict[int, np.ndarray]]:
+    def process(self, EstimatedGrid: np.ndarray) -> list[np.ndarray]:
         expected_shape = (self.nPRB * 12, self.nOFDMSymbolsPerSlot)
         if EstimatedGrid.shape != expected_shape:
             raise ValueError(f"Expected EstimatedGrid shape {expected_shape}, but received {EstimatedGrid.shape}.")
@@ -101,24 +101,17 @@ class ResourceDemapper():
             raise NotImplementedError("Only single-layer reception is currently supported.")
 
         LayerMappedSymbols = [[]]
-        DMRSs = {}
         for l in self.allocatedPDSCHSymbols:
-            DMRSs[l] = []
             for prb in self.allocatedPRB:
                 start_k = prb * 12
                 for k in range(start_k, start_k + 12):
                     REType = self.RETypeGrid[k, l]
-                    if REType == "DMRS":
-                        DMRSs[l].append(EstimatedGrid[k, l])
-                    elif REType == "PDSCH_DATA":
+                    if REType == "PDSCH_DATA":
                         LayerMappedSymbols[0].append(EstimatedGrid[k, l])
 
         LayerMappedSymbols = [np.asarray(LayerMappedSymbols[0], dtype=EstimatedGrid.dtype)]
 
-        DMRSs = {l: np.asarray(dmrs, dtype=EstimatedGrid.dtype) for l, dmrs in DMRSs.items()}
-        DMRSs = {l: dmrs for l, dmrs in DMRSs.items() if len(dmrs) > 0}
-
-        return LayerMappedSymbols, DMRSs
+        return LayerMappedSymbols
     
 if __name__ == "__main__":
     config = ResourceMappingConfig(

@@ -65,17 +65,11 @@ class QAMDemapper:
         return constellation, bit_labels
 
     def process(self, ReceivedSymbols: list[np.ndarray], noiseVariance: float) -> list[np.ndarray]:
-        if noiseVariance <= 0:
-            raise ValueError("noiseVariance must be positive.")
 
         codewordLLRs = []
-        for symbols in ReceivedSymbols:
-            # Shape:
-            #
-            # (N_symbols, M)
-            #
-            # Each row contains distances from one
-            # received symbol to every constellation point.
+        for l,symbols in enumerate(ReceivedSymbols):
+            if noiseVariance <= 0:
+                raise ValueError("noiseVariance must be positive.")
 
             distances = np.abs(symbols[:, None] - self.constellation[None, :]) ** 2
             LLRs = np.empty((len(symbols), self.Qm), dtype=np.float64)
@@ -85,11 +79,6 @@ class QAMDemapper:
 
                 min_distance_0 = np.min(distances[:, mask_0], axis=1)
                 min_distance_1 = np.min(distances[:, mask_1], axis=1)
-
-                # Max-log approximation
-                #
-                # LLR > 0 → bit 0 more likely
-                # LLR < 0 → bit 1 more likely
 
                 LLRs[:, bit_position] = (min_distance_1 - min_distance_0) / noiseVariance
 
@@ -103,9 +92,10 @@ if __name__ == '__main__':
     bits = np.random.randint(0, 2, NumBits)
     ThisQAMMapper = QAMMapper(Qm)
     ModulatedSymbols = ThisQAMMapper.process([bits])
+    VarNoise = 1e-10
 
     ThisQAMDemapper = QAMDemapper(Qm)
-    LLRs = ThisQAMDemapper.process(ModulatedSymbols, noiseVariance=1e-10)
+    LLRs = ThisQAMDemapper.process(ModulatedSymbols, VarNoise)
     print('Assume ideal mapping...')
     EstimatedBits = np.array([1 if llr < 0 else 0 for llr in LLRs[0]])
     print("Maximum absolute difference: ", np.max(np.abs(bits - EstimatedBits)))

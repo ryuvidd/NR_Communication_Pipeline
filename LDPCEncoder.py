@@ -256,9 +256,6 @@ class LDPCDecoder():
                 if len(mask) != self.K:
                     raise ValueError(f"Filler mask length does not match decoded block {cb_index}.")
 
-                # Filler bits are known zeros (TS 38.212 rate recovery). They
-                # are not transmitted, so replace their zero LLRs with a
-                # strong positive prior before iterative decoding.
                 L.reshape(-1)[np.flatnonzero(mask)] = 1e12
 
             R = np.zeros((self.H_BG.shape[0], self.H_BG.shape[1], self.Z_c), dtype=np.float64)
@@ -271,10 +268,11 @@ class LDPCDecoder():
 
                 if self.__parity_check__(x_hard):
                     converged = True
+                    # print(f"Converged at Iteration: {iter_count}")
                     break
 
-            if not converged:
-                print(f"Block {cb_index}: decoder did not converge after {self.maxIter} iterations")
+            # if not converged:
+            #     print(f"Block {cb_index}: decoder did not converge after {self.maxIter} iterations")
 
             estimated_codeword = x_hard[:self.num_info_block].reshape(-1).astype(np.int8)
             if self.fillerMask is not None:

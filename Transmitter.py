@@ -36,7 +36,7 @@ class TransmitterConfig:
 
 class Transmitter():
     def __init__(self, config: TransmitterConfig):
-        logging.info("..... Initializing configuration setup .....")
+        logging.debug("..... Initializing configuration setup .....")
         self.TBSGenerator = TBSGenerator()
         temp_config = TBSGeneratorConfig(
             numAllocatedPRB = len(config.allocatedPRB),
@@ -106,23 +106,23 @@ class Transmitter():
 
     def process(self, InformationData) -> list[np.ndarray]:
         TransportBlock = InformationData[:self.meta["TBS"]]
-        logging.info("======== Completed generating transport block ========")
+        logging.debug("======== Completed generating transport block ========")
         CodeBlocks = self.CodeBlockSegmenter.process(TransportBlock, self.meta["LDPCBlockParam"])
-        logging.info("======== Completed code block segmentation ========")
+        logging.debug("======== Completed code block segmentation ========")
         EncodedCodeBlocks = self.Encoder.process(CodeBlocks, validityCheckFlag=False)
-        logging.info("======== Completed encoding code blocks ========")
+        logging.debug("======== Completed encoding code blocks ========")
         RateMatchedCodeBlocks = self.RateMatcher.process(EncodedCodeBlocks, self.rv_id)
-        logging.info("======== Completed rate matching code blocks ========")
+        logging.debug("======== Completed rate matching code blocks ========")
         Codeword = self.CodeBlockConcatenator.process(RateMatchedCodeBlocks)
         ScrambledBits = self.Scrambler.process(Codeword)
-        logging.info("======== Completed scrambling ========")
+        logging.debug("======== Completed scrambling ========")
         QAMSymbols = self.QAMMapper.process(ScrambledBits)
-        logging.info("======== Completed QAM mapping ========")
+        logging.debug("======== Completed QAM mapping ========")
         LayerMappedSymbols = self.LayerMapper.process(QAMSymbols)
-        logging.info("======== Completed layer mapping ========")
+        logging.debug("======== Completed layer mapping ========")
         DMRSs = self.DMRSGenerator.process()
         grid = self.ResourceMapper.process(LayerMappedSymbols, DMRSs)
-        logging.info("======== Completed constructing resource grid ========")
+        logging.debug("======== Completed constructing resource grid ========")
         TransmittedSymbols = self.OFDMModulator.process(grid)
         return TransmittedSymbols
 

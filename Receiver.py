@@ -32,10 +32,11 @@ class ReceiverConfig:
     lambda_bar: int
     n_SCID: int
     NFFT: int
+    maxIter: int
 
 class Receiver():
     def __init__(self, config: ReceiverConfig):
-        logging.info("..... Initializing configuration setup .....")
+        logging.debug("..... Initializing configuration setup .....")
         self.TBSGenerator = TBSGenerator()
         temp_config = TBSGeneratorConfig(
             numAllocatedPRB = len(config.allocatedPRB),
@@ -113,28 +114,29 @@ class Receiver():
             Z_c = self.meta["LDPCBlockParam"]["Z_c"],
             K = self.meta["LDPCBlockParam"]["K"]
         )
-        self.LDPCDecoder = LDPCDecoder(temp_config, 100, self.meta["mask_NULLs"])
+        self.LDPCDecoder = LDPCDecoder(temp_config, config.maxIter, self.meta["mask_NULLs"])
         self.CodeBlockCombiner = CodeBlockCombiner(self.meta["LDPCBlockParam"]["C"])
 
-    def process(self, ReceivedSignal: list[np.ndarray]) -> tuple:
+    def process(self, ReceivedSignal: list[np.ndarray], VarNoise: float) -> tuple:
         EstimatedGrid = self.OFDMDemodulator.process(ReceivedSignal)
-        logging.info("======== Completed restructing resource grid ========")
+        logging.debug("======== Completed restructing resource grid ========")
         DMRSs = self.DMRSGenerator.process()
         EstimatedChannel = self.ChannelEstimator.process(EstimatedGrid, DMRSs)
+        logging.debug("======== Completed estimating channel ========")
         EqualizedGrid = self.Equalizer.process(EstimatedChannel, EstimatedGrid)
-        EstimatedLayerMappedSymbols, ReceivedDMRS = self.ResourceDemapper.process(EqualizedGrid)
-        logging.info("======== Completed restrucing layered symbols ========")
-        EstimatedSymbols = EstimatedLayerMappedSymbols
-        EstimatedQAMSymbols = self.LayerDemapper.process(EstimatedSymbols)
-        logging.info("======== Completed estimating QAM symbols ========")
-        LLRs = self.QAMDemapper.process(EstimatedQAMSymbols, noiseVariance=1e-10)
-        logging.info("======== Completed estimating LLRs ========")
+        logging.debug("======== Completed equalizing ========")
+        EstimatedLayerMappedSymbols = self.ResourceDemapper.process(EqualizedGrid)
+        logging.debug("======== Completed restrucing layered symbols ========")
+        EstimatedQAMSymbols = self.LayerDemapper.process(EstimatedLayerMappedSymbols)
+        logging.debug("======== Completed estimating QAM symbols ========")
+        LLRs = self.QAMDemapper.process(EstimatedQAMSymbols, VarNoise)
+        logging.debug("======== Completed estimating LLRs ========")
         DescrambledLLRs = self.Descrambler.process(LLRs)
-        logging.info("======== Completed descrambling LLRs ========")
+        logging.debug("======== Completed descrambling LLRs ========")
         RateRecoveredLLRs = self.RateRecoverer.process(DescrambledLLRs, self.rv_id)
-        logging.info("======== Completed rate recovery LLRs ========")
+        logging.debug("======== Completed rate recovery LLRs ========")
         EstimatedCodeBlocks = self.LDPCDecoder.process(RateRecoveredLLRs)
-        logging.info("======== Completed estimating code blocks ========")
+        logging.debug("======== Completed estimating code blocks ========")
         retransmissionCodeBlockIndices, EstimatedTransportBlock = self.CodeBlockCombiner.process(EstimatedCodeBlocks)
-        logging.info("======== Completed estimating transport block ========")
+        logging.debug("======== Completed estimating transport block ========")
         return retransmissionCodeBlockIndices, EstimatedTransportBlock

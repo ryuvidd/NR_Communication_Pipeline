@@ -1,7 +1,4 @@
-from Transmitter import *
-from Receiver import *
-from Channel import *
-from util import *
+from Simulation import *
 
 if __name__ == '__main__':
     
@@ -44,7 +41,8 @@ if __name__ == '__main__':
         N_DMRS_ID = 100,
         lambda_bar = 0,
         n_SCID = 0,
-        NFFT = 1024
+        NFFT = 1024,
+        maxIter = 50
     )
 
     ChannelConfig = RayleighFadingConfig(
@@ -57,26 +55,28 @@ if __name__ == '__main__':
         nOFDMSymbolsPerSlot = 14
     )
     
-    rng = np.random.default_rng(34)
-    InformationData = rng.integers(0, 2, size=100000, dtype=np.uint8)
+    DEBUG_MODE = False
+    logging_level(DEBUG_MODE)
+    rng = np.random.default_rng()
+    SNR = list(range(-4,7,2))
+    nMC = 2
 
-    ThisTransmitter = Transmitter(TxConfig)
-    TransmittedSymbols = ThisTransmitter.process(InformationData)
-    logging.info("...................................")
-    logging.info("...... Transmitted Wave Form ......")
-    Channel = RayleighFadingChannel(ChannelConfig)
-    ChannelOutputs = Channel.process(TransmittedSymbols)
-    logging.info("...................................")
-    ThisReceiver = Receiver(RxConfig)
-    retransmissionCodeBlockIndices, EstimatedTransportBlock = ThisReceiver.process(ChannelOutputs)
+    ThisSimulator = Simulator(TxConfig, RxConfig, ChannelConfig)
+    Results = np.zeros((len(SNR),nMC), dtype=bool)
+    SuccessRate = np.zeros(len(SNR))
+    for i,snr in enumerate(SNR):
+        logging.info(f"===== Simulation under SNR {snr}dB =====")
+        for m in range(nMC):
+            isSuccess = ThisSimulator.process(DEBUG_MODE, snr)
+            if isSuccess:
+                logging.info(f"Transmission {m+1}: Success")
+            else:
+                logging.info(f"Transmission {m+1}: Failure")
+            Results[i,m] = isSuccess
+        SuccessRate[i] = np.mean(Results[i]) * 100
+        logging.info(f"-- Success rate: {SuccessRate[i]:.3f}%\n")
     
-    if len(retransmissionCodeBlockIndices) == 0:
-        TransportBlock = InformationData[:ThisTransmitter.meta["TBS"]]
-        if np.allclose(TransportBlock, EstimatedTransportBlock):
-            logging.info("===== Success =====")
-        else: logging.info("===== Failure =====")
-    else: 
-        logging.info("===== Failure =====")
-    
-
+    logging.info("===== Overall Summary =====")
+    for i,snr in enumerate(SNR):
+        logging.info(f"SNR {snr}dB: {SuccessRate[i]:.3f}% success")
     
