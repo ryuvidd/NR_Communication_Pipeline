@@ -59,16 +59,16 @@ if __name__ == '__main__':
     DEBUG_MODE = False
     logging_level(DEBUG_MODE)
     rng = np.random.default_rng()
-    EsN0_dB = list(range(-5,20,5))
-    nMC = 100
+    EsN0_dB = list(range(-4,11,2))
+    nMC = 10
     HARQ_number = 0
 
     ThisSimulator = Simulator(TxConfig, RxConfig, ChannelConfig)
-    Results = np.zeros((len(EsN0_dB),nMC), dtype=bool)
-    SuccessRate = np.zeros(len(EsN0_dB))
+    BLER = np.zeros(len(EsN0_dB))
     NMSE_dB = np.zeros(len(EsN0_dB))
-    EVM = np.zeros(len(EsN0_dB))
+    EVM_dB = np.zeros(len(EsN0_dB))
     CodedBER = np.zeros(len(EsN0_dB))
+    TB_BER = np.zeros(len(EsN0_dB))
 
     for i,EsN0 in enumerate(EsN0_dB):
         logging.info(f"===== Simulation under Es/N0 {EsN0} dB =====")
@@ -76,6 +76,8 @@ if __name__ == '__main__':
         total_channel_power = 0
         totalEVM = 0
         totalCodedBER = 0
+        totalTB_BER = 0
+        totalBLER = 0
 
         for m in range(nMC):
             results = ThisSimulator.process(DEBUG_MODE, EsN0, HARQ_number)
@@ -83,27 +85,32 @@ if __name__ == '__main__':
             total_channel_power += results["channel_power"]
             totalEVM += results["evm"]
             totalCodedBER += results["coded_ber"]
+            totalTB_BER += results["tb_ber"]
+            totalBLER += results["bler"]
 
-            if results["isSuccess"]:
+            if results["bler"] == 0:
                 logging.info(f"Transmission {m+1}: Success")
             else:
                 logging.info(f"Transmission {m+1}: Failure")
-            Results[i,m] = results["isSuccess"]
 
         NMSE_dB[i] = 10 * np.log10((total_error_power / total_channel_power))
-        EVM[i] = totalEVM / nMC * 100
+        EVM_dB[i] = 10 * np.log10(totalEVM / nMC)
         CodedBER[i] = totalCodedBER / nMC * 100
-        SuccessRate[i] = np.mean(Results[i]) * 100
-        logging.info(f"-- NMSE: {NMSE_dB[i]:.3f} dB")
-        logging.info(f"-- EVM: {EVM[i]:.3f} %")
-        logging.info(f"-- Coded BER: {CodedBER[i]:.3f} %")
-        logging.info(f"-- Success rate: {SuccessRate[i]:.3f}%\n")
+        TB_BER[i] = totalTB_BER / nMC * 100
+        BLER[i] = totalBLER / nMC * 100
+
+        logging.info(f"-- NMSE: {NMSE_dB[i]:.2f} dB")
+        logging.info(f"-- EVM: {EVM_dB[i]:.2f} dB")
+        logging.info(f"-- Coded BER: {CodedBER[i]:.2f} %")
+        logging.info(f"-- TB BER: {TB_BER[i]:.2f} %")
+        logging.info(f"-- BLER: {BLER[i]:.2f}%\n")
     
     logging.info("===== Overall Summary =====")
     for i,EsN0 in enumerate(EsN0_dB):
         logging.info(f"SNR {EsN0} dB:")
-        logging.info(f"   NMSE {NMSE_dB[i]:.3f} dB")
-        logging.info(f"   EVM {EVM[i]:.3f} %")
-        logging.info(f"   Coded BER {CodedBER[i]:.3f} %")
-        logging.info(f"   Success rate {SuccessRate[i]:.3f}%\n")
+        logging.info(f"   NMSE {NMSE_dB[i]:.2f} dB")
+        logging.info(f"   EVM {EVM_dB[i]:.2f} dB")
+        logging.info(f"   Coded BER {CodedBER[i]:.2f} %")
+        logging.info(f"   TB BER {TB_BER[i]:.2f} %")
+        logging.info(f"   BLER {BLER[i]:.2f}%\n")
     

@@ -270,7 +270,7 @@ class LDPCDecoder():
 
             if not converged:
                 HARQ_ACK = "NACK"
-                return HARQ_ACK, [np.ndarray(0)]
+                # return HARQ_ACK, [np.ndarray(0)]
 
             estimated_codeword = x_hard[:self.num_info_block].reshape(-1).astype(np.int8)
             if self.fillerMask is not None:

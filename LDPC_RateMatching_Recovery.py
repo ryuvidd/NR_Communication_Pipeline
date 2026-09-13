@@ -93,7 +93,6 @@ class RateRecoverer():
         self.E = self.__calculate_E__(C)
         self.N_cb = 66 * self.Z_c if self.baseGraph == 1 else 50 * self.Z_c
         self.HARQ_buffer = {}
-        # self.LLRbuffer = [np.zeros(self.N_cb, dtype=np.float64) for _ in range(C)]
         self.fillerMask = []
         for i in range(C):
             if len(fillerMask) != C: 

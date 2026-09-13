@@ -12,13 +12,19 @@ class Simulator():
         self.Evaluator = ChannelEstimationNMSE(TxConfig.allocatedPDSCHSymbols, TxConfig.allocatedPRB)
         self.ALLEvaluator = Evaluator(TxConfig.allocatedPDSCHSymbols,TxConfig.allocatedPRB)
 
+    def reset(self):
+        self.Transmitter.HARQ_EncodedCodeBlocks = {}
+        self.Receiver.RateRecoverer.HARQ_buffer = {}
+        NDI = not self.Transmitter.NDI
+        return NDI
+
     def process(self, DEBUG_MODE: bool, EsN0_dB: float, HARQ_number: int) -> dict:
         logging_level(DEBUG_MODE)
         rng = np.random.default_rng()
         RV_id = [0,2,3,1]
         InformationData = rng.integers(0, 2, size=100000, dtype=np.uint8)
-        
-        NDI = not self.Transmitter.NDI
+        NDI = self.reset()
+
         for rv_id in RV_id:
             TransmittedSymbols = self.Transmitter.process(InformationData, HARQ_number, NDI, rv_id)
             logging.debug("...................................")
@@ -35,24 +41,18 @@ class Simulator():
         Estimated = {
             "Channel": self.Receiver.meta["EstimatedChannel"],
             "QAMSymbols": self.Receiver.meta["EstimatedQAMSymbols"],
-            "LLRs": self.Receiver.meta["LLRs"]
+            "LLRs": self.Receiver.meta["LLRs"],
+            "TransportBlock": EstimatedTransportBlock
         }
 
         GroundTruth = {
             "Channel": self.Channel.ChannelFrequency,
             "QAMSymbols": self.Transmitter.meta["QAMSymbols"],
-            "ScrambledBits": self.Transmitter.meta["ScrambledBits"]
+            "ScrambledBits": self.Transmitter.meta["ScrambledBits"],
+            "TransportBlock": InformationData[:self.Transmitter.meta["TBS"]]
         }
 
         results = self.ALLEvaluator.process(Estimated, GroundTruth)
-        
-        isSuccess = False
-        if HARQ_ACK == "ACK":
-            TransportBlock = InformationData[:self.Transmitter.meta["TBS"]]
-            bit_errors = np.count_nonzero(TransportBlock != EstimatedTransportBlock)
-            isSuccess = bit_errors == 0
-
-        results["isSuccess"] =  isSuccess
         
         return results
 

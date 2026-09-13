@@ -146,10 +146,11 @@ class Receiver():
         HARQ_ACK, EstimatedCodeBlocks = self.LDPCDecoder.process(RateRecoveredLLRs)
         if HARQ_ACK == "ACK":
             logging.debug("======== Completed decoding code blocks ========")
-            HARQ_ACK, EstimatedTransportBlock = self.CodeBlockCombiner.process(EstimatedCodeBlocks)
-            logging.debug("======== Completed estimating transport block ========")
-            return HARQ_ACK, EstimatedTransportBlock
         else:
             logging.debug("======== Failed decoding code blocks ========")
-            return HARQ_ACK, np.array(-1)
+        HARQ_ACK, EstimatedTransportBlock = self.CodeBlockCombiner.process(EstimatedCodeBlocks, HARQ_ACK)
+        if HARQ_ACK == "ACK":
+            logging.debug("======== Completed estimating transport block ========")
+        
+        return HARQ_ACK, EstimatedTransportBlock
         

@@ -107,32 +107,22 @@ class CodeBlockCombiner():
             self.CRC24B = CRC(L="24B")
         self.CRC24A = CRC(L="24A")
 
-    def process(self, EstimatedCodewords: list[np.ndarray]) -> tuple:
-        # retransmissionCodeBlockIndices = []
+    def process(self, EstimatedCodewords: list[np.ndarray], HARQ_ACK: str) -> tuple:
         EstimatedTransportBlock = np.array(-1)
-        HARQ_ACK = "ACK"
         if len(EstimatedCodewords) > 1:
             ConcatentedCodeBlock = []
             for r,code_block in enumerate(EstimatedCodewords):
                 code_block_without_fillers = code_block[code_block != -1]
-                if self.CRC24B.check(code_block_without_fillers):
-                    ConcatentedCodeBlock.append(code_block_without_fillers[:-self.CRC24B.CRCLength])
-                else:
+                ConcatentedCodeBlock.append(code_block_without_fillers[:-self.CRC24B.CRCLength])
+                if not self.CRC24B.check(code_block_without_fillers):
                     HARQ_ACK = "NACK"
-                    # retransmissionCodeBlockIndices.append(r)
-                    return HARQ_ACK, EstimatedTransportBlock
-            if HARQ_ACK == "ACK":
                 LastCRCCheckCodeBlock = np.concatenate(ConcatentedCodeBlock)
-            # else:
-            #     return retransmissionCodeBlockIndices, EstimatedTransportBlock
 
         else:
             LastCRCCheckCodeBlock = EstimatedCodewords[0][EstimatedCodewords[0] != -1]
 
-        if self.CRC24A.check(LastCRCCheckCodeBlock):
-            EstimatedTransportBlock = LastCRCCheckCodeBlock[:-self.CRC24A.CRCLength]
-        else:
-            # retransmissionCodeBlockIndices.append(-1)
+        EstimatedTransportBlock = LastCRCCheckCodeBlock[:-self.CRC24A.CRCLength]
+        if not self.CRC24A.check(LastCRCCheckCodeBlock):
             HARQ_ACK = "NACK"
         return HARQ_ACK, EstimatedTransportBlock
         
