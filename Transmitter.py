@@ -103,20 +103,27 @@ class Transmitter():
             NFFT = config.NFFT
         )
         self.OFDMModulator = OFDMModulator(temp_config)
+        self.NDI = False
+        self.HARQ_EncodedCodeBlocks = {}
 
-    def process(self, InformationData) -> list[np.ndarray]:
-        TransportBlock = InformationData[:self.meta["TBS"]]
-        logging.debug("======== Completed generating transport block ========")
-        CodeBlocks = self.CodeBlockSegmenter.process(TransportBlock, self.meta["LDPCBlockParam"])
-        logging.debug("======== Completed code block segmentation ========")
-        EncodedCodeBlocks = self.Encoder.process(CodeBlocks, validityCheckFlag=False)
-        logging.debug("======== Completed encoding code blocks ========")
-        RateMatchedCodeBlocks = self.RateMatcher.process(EncodedCodeBlocks, self.rv_id)
+    def process(self, InformationData, HARQ_number:int, NDI:bool, RV_id: int) -> list[np.ndarray]:
+        if self.NDI != NDI:
+            TransportBlock = InformationData[:self.meta["TBS"]]
+            logging.debug("======== Completed generating transport block ========")
+            CodeBlocks = self.CodeBlockSegmenter.process(TransportBlock, self.meta["LDPCBlockParam"])
+            logging.debug("======== Completed code block segmentation ========")
+            self.HARQ_EncodedCodeBlocks[HARQ_number] = self.Encoder.process(CodeBlocks, validityCheckFlag=False)
+            logging.debug("======== Completed encoding code blocks ========")
+            self.NDI = NDI
+        
+        RateMatchedCodeBlocks = self.RateMatcher.process(self.HARQ_EncodedCodeBlocks[HARQ_number], RV_id)
         logging.debug("======== Completed rate matching code blocks ========")
         Codeword = self.CodeBlockConcatenator.process(RateMatchedCodeBlocks)
         ScrambledBits = self.Scrambler.process(Codeword)
+        self.meta["ScrambledBits"] = ScrambledBits
         logging.debug("======== Completed scrambling ========")
         QAMSymbols = self.QAMMapper.process(ScrambledBits)
+        self.meta["QAMSymbols"] = QAMSymbols
         logging.debug("======== Completed QAM mapping ========")
         LayerMappedSymbols = self.LayerMapper.process(QAMSymbols)
         logging.debug("======== Completed layer mapping ========")

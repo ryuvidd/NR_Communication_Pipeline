@@ -89,8 +89,11 @@ class RateRecoverer():
         self.baseGraph = config.baseGraph
         self.Z_c = config.Z_c
         self.G = config.G
+        self.C = C
         self.E = self.__calculate_E__(C)
-        self.N_cb = self.__compute__Ncb__(config.baseGraph, config.Z_c)
+        self.N_cb = 66 * self.Z_c if self.baseGraph == 1 else 50 * self.Z_c
+        self.HARQ_buffer = {}
+        # self.LLRbuffer = [np.zeros(self.N_cb, dtype=np.float64) for _ in range(C)]
         self.fillerMask = []
         for i in range(C):
             if len(fillerMask) != C: 
@@ -98,6 +101,9 @@ class RateRecoverer():
             filler = np.zeros(self.N_cb, dtype=bool)
             filler[:len(fillerMask[i]) - (2 * self.Z_c)] = fillerMask[i][2 * config.Z_c:]
             self.fillerMask.append(filler)
+
+    def reset_buffer(self, HARQ_number:int):
+        self.HARQ_buffer[HARQ_number] = [np.zeros(self.N_cb, dtype=np.float64) for _ in range(self.C)]
 
     def __select_k0__(self, rv_id: int, N_cb: int):
 
@@ -133,13 +139,6 @@ class RateRecoverer():
             raise ValueError("Calculated E values do not sum to G.")
         return E
     
-    def __compute__Ncb__(self, basegraph, Zc):
-        if basegraph not in (1,2):
-            raise ValueError("basegraph must be 1 or 2.")
-        if basegraph == 1: N = 66 * Zc
-        else: N = 50 * Zc
-        return N
-    
     def bitDeinterleave(self, DescrambledLLRs: list[np.ndarray]) -> list[np.ndarray]:
         DeinterleavedLLRs = []
         for r, E_ in enumerate(self.E):
@@ -153,27 +152,28 @@ class RateRecoverer():
                     source_idx = i + j * self.Qm
                     destination_idx = (i * E_) // self.Qm + j
                     e[destination_idx] = f[source_idx]
-
             DeinterleavedLLRs.append(e)
+            
         return DeinterleavedLLRs
     
-    def inverseBitSelection(self, DeinterleavedLLRs: list[np.ndarray], rv_id: int) -> list[np.ndarray]:
+    def inverseBitSelection(self, DeinterleavedLLRs: list[np.ndarray], HARQ_number:int, rv_id: int) -> list[np.ndarray]:
+        
         RecoveredLLRs = []
         for r, e in enumerate(DeinterleavedLLRs):
             k_0 = self.__select_k0__(rv_id, self.N_cb)
-            recovered = np.zeros(self.N_cb, dtype=np.float64)
             k = 0
             j = 0
             while k < len(e):
                 idx = (k_0 + j) % self.N_cb
                 if not self.fillerMask[r][idx]:
-                    recovered[idx] += e[k]
+                    self.HARQ_buffer[HARQ_number][r][idx] += e[k]
                     k += 1
                 j += 1
-            RecoveredLLRs.append(recovered)
+            RecoveredLLRs.append(self.HARQ_buffer[HARQ_number][r])
+    
         return RecoveredLLRs
     
-    def process(self, DescrambledLLRs: np.ndarray, rv_id: int) -> list[np.ndarray]:
+    def process(self, DescrambledLLRs: np.ndarray, HARQ_number:int, rv_id: int) -> list[np.ndarray]:
         # Code block segmentation
         DescrambledLLRsCodeBlocks = []
         start_idx = 0
@@ -183,7 +183,7 @@ class RateRecoverer():
 
         # Rate Recovery
         DeinterleavedBlock = self.bitDeinterleave(DescrambledLLRsCodeBlocks)
-        EstimatedEncodedLLRsCodeBlocks = self.inverseBitSelection(DeinterleavedBlock, rv_id)
+        EstimatedEncodedLLRsCodeBlocks = self.inverseBitSelection(DeinterleavedBlock, HARQ_number, rv_id)
         return EstimatedEncodedLLRsCodeBlocks
 
 if __name__ == "__main__":
@@ -196,8 +196,9 @@ if __name__ == "__main__":
     )
 
     C = 3
-    N_cb = 66 * config.Z_c
-    rv_id = 1
+    N_cb = 66 * config.Z_c if config.baseGraph == 1 else 50 * config.Z_c
+    rv_id = 0
+    HARQ_number = 0
 
     rng = np.random.default_rng(12345)
     EncodedCodeBlocks = []
@@ -240,7 +241,7 @@ if __name__ == "__main__":
             G=rateMatcher.E[r]
         )
         block_recoverer = RateRecoverer(block_config, C=1, fillerMask=[fillerMasks[r]])
-        recovered = block_recoverer.process(TransmittedLLRs[r], rv_id)[0]
+        recovered = block_recoverer.process(TransmittedLLRs[r], HARQ_number, rv_id)[0]
         fillerMask = block_recoverer.fillerMask[0]
 
         # Determine which circular-buffer positions should have been transmitted.

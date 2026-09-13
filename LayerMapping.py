@@ -65,14 +65,15 @@ class LayerDemapper():
 
         return output
 
-    def process(self, LayerMappedSymbols: list[np.ndarray]) -> list[np.ndarray]:
+    def process(self, LayerMappedSymbols: list[np.ndarray], EffectiveVarNoise: list[np.ndarray]) -> tuple[list[np.ndarray], list[np.ndarray]]:
 
         if len(LayerMappedSymbols) != self.nLayer:
             raise ValueError(f"Expected {self.nLayer} layers, but received {len(LayerMappedSymbols)}.")
 
         if self.nLayer <= 4:
             d0 = self.__combine_layers__(LayerMappedSymbols)
-            return [d0]
+            d0_varNoise = self.__combine_layers__(EffectiveVarNoise)
+            return [d0], [d0_varNoise]
         else:
             d0_layers = LayerMappedSymbols[:self.d0_num]
             d1_layers = LayerMappedSymbols[self.d0_num:]
@@ -80,33 +81,39 @@ class LayerDemapper():
             d0 = self.__combine_layers__(d0_layers)
             d1 = self.__combine_layers__(d1_layers)
 
-            return [d0, d1]
+            d0_layers_varNoise = EffectiveVarNoise[:self.d0_num]
+            d1_layers_varNoise = EffectiveVarNoise[self.d0_num:]
+
+            d0_varNoise = self.__combine_layers__(d0_layers_varNoise)
+            d1_varNoise = self.__combine_layers__(d1_layers_varNoise)
+
+            return [d0, d1], [d0_varNoise, d1_varNoise]
     
-if __name__ == '__main__':
-    nLayer = 6
-    seqlen = nLayer * 10
-    seq = np.arange(seqlen)
-    q = 2 if nLayer > 4 else 1
-    q_len = seqlen // q
-    QAMSymbols = []
-    print("--- QAMSymbols ---")
-    for i in range(q):
-        cw = seq[i*q_len:(i+1)*q_len]
-        QAMSymbols.append(cw)
-        print(cw)
+# if __name__ == '__main__':
+    # nLayer = 6
+    # seqlen = nLayer * 10
+    # seq = np.arange(seqlen)
+    # q = 2 if nLayer > 4 else 1
+    # q_len = seqlen // q
+    # QAMSymbols = []
+    # print("--- QAMSymbols ---")
+    # for i in range(q):
+    #     cw = seq[i*q_len:(i+1)*q_len]
+    #     QAMSymbols.append(cw)
+    #     print(cw)
 
-    print("\n--- Layer Mapped ---")
-    ThisLayerMapper = LayerMapper(nLayer)
-    LayerMappedSymbols = ThisLayerMapper.process(QAMSymbols)
-    for i in range(nLayer):
-        print(LayerMappedSymbols[i])
+    # print("\n--- Layer Mapped ---")
+    # ThisLayerMapper = LayerMapper(nLayer)
+    # LayerMappedSymbols = ThisLayerMapper.process(QAMSymbols)
+    # for i in range(nLayer):
+    #     print(LayerMappedSymbols[i])
 
-    print("\n--- Estimated QAM ---")
-    ThisLayerDemapper = LayerDemapper(nLayer)
-    EstimatedQAMSymbols = ThisLayerDemapper.process(LayerMappedSymbols)
-    for i in range(q):
-        print(f"Codeword {i}:")
-        print("Maximum absolute difference: ", np.max(np.abs(QAMSymbols[i] - EstimatedQAMSymbols[i])))
-        print("No significant error: ", np.allclose(QAMSymbols[i], EstimatedQAMSymbols[i])) 
-        print("")
+    # print("\n--- Estimated QAM ---")
+    # ThisLayerDemapper = LayerDemapper(nLayer)
+    # EstimatedQAMSymbols = ThisLayerDemapper.process(LayerMappedSymbols)
+    # for i in range(q):
+    #     print(f"Codeword {i}:")
+    #     print("Maximum absolute difference: ", np.max(np.abs(QAMSymbols[i] - EstimatedQAMSymbols[i])))
+    #     print("No significant error: ", np.allclose(QAMSymbols[i], EstimatedQAMSymbols[i])) 
+    #     print("")
     

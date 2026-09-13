@@ -108,33 +108,33 @@ class CodeBlockCombiner():
         self.CRC24A = CRC(L="24A")
 
     def process(self, EstimatedCodewords: list[np.ndarray]) -> tuple:
-        retransmissionCodeBlockIndices = []
+        # retransmissionCodeBlockIndices = []
         EstimatedTransportBlock = np.array(-1)
+        HARQ_ACK = "ACK"
         if len(EstimatedCodewords) > 1:
             ConcatentedCodeBlock = []
             for r,code_block in enumerate(EstimatedCodewords):
-                # Filler bits are represented as -1 after LDPC decoding and
-                # are not part of the CRC-protected code block.
                 code_block_without_fillers = code_block[code_block != -1]
                 if self.CRC24B.check(code_block_without_fillers):
                     ConcatentedCodeBlock.append(code_block_without_fillers[:-self.CRC24B.CRCLength])
                 else:
-                    retransmissionCodeBlockIndices.append(r)
-            if len(retransmissionCodeBlockIndices) == 0:
+                    HARQ_ACK = "NACK"
+                    # retransmissionCodeBlockIndices.append(r)
+                    return HARQ_ACK, EstimatedTransportBlock
+            if HARQ_ACK == "ACK":
                 LastCRCCheckCodeBlock = np.concatenate(ConcatentedCodeBlock)
-            else:
-                return retransmissionCodeBlockIndices, EstimatedTransportBlock
+            # else:
+            #     return retransmissionCodeBlockIndices, EstimatedTransportBlock
 
         else:
-            # For C=1, remove LDPC filler placeholders before checking the
-            # transport-block CRC.
             LastCRCCheckCodeBlock = EstimatedCodewords[0][EstimatedCodewords[0] != -1]
 
         if self.CRC24A.check(LastCRCCheckCodeBlock):
             EstimatedTransportBlock = LastCRCCheckCodeBlock[:-self.CRC24A.CRCLength]
         else:
-            retransmissionCodeBlockIndices.append(-1)
-        return retransmissionCodeBlockIndices, EstimatedTransportBlock
+            # retransmissionCodeBlockIndices.append(-1)
+            HARQ_ACK = "NACK"
+        return HARQ_ACK, EstimatedTransportBlock
         
     
 if __name__ == "__main__":

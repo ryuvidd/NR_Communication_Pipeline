@@ -157,9 +157,6 @@ class LDPCEncoder():
             # Concatenate code block with parities and apply NULL, following step 2
             fullCodeBlock = np.concatenate([NewcodeBlock, w_blocks.reshape(-1)])
             fullCodeBlock = fullCodeBlock.astype(np.int8)
-            # Boolean indexing after a slice creates a temporary copy.  Use
-            # absolute indices so filler markers are restored in-place before
-            # rate matching skips them.
             fullCodeBlock[np.flatnonzero(fillerMask)] = -1
             encodedCodeBlock = fullCodeBlock.copy()[2 * self.Z_c:]
 
@@ -244,11 +241,12 @@ class LDPCDecoder():
         if np.all(syndrome == 0): return True
         else: return False
 
-    def process(self, EncodedLLRs: list[np.ndarray]):
+    def process(self, EncodedLLRs: list[np.ndarray]) -> tuple[str, list[np.ndarray]]:
         if self.fillerMask is not None and len(EncodedLLRs) != len(self.fillerMask):
             raise ValueError("Number of LLR blocks does not match number of filler masks.")
 
         EstimatedCodewords = []
+        HARQ_ACK = "ACK"
         for cb_index, encoded_llrs in enumerate(EncodedLLRs):
             L = np.concatenate((np.zeros(2 * self.Z_c), encoded_llrs)).reshape(-1, self.Z_c)
             if self.fillerMask is not None:
@@ -268,11 +266,11 @@ class LDPCDecoder():
 
                 if self.__parity_check__(x_hard):
                     converged = True
-                    # print(f"Converged at Iteration: {iter_count}")
                     break
 
-            # if not converged:
-            #     print(f"Block {cb_index}: decoder did not converge after {self.maxIter} iterations")
+            if not converged:
+                HARQ_ACK = "NACK"
+                return HARQ_ACK, [np.ndarray(0)]
 
             estimated_codeword = x_hard[:self.num_info_block].reshape(-1).astype(np.int8)
             if self.fillerMask is not None:
@@ -280,11 +278,11 @@ class LDPCDecoder():
                 estimated_codeword[mask] = -1
             EstimatedCodewords.append(estimated_codeword)
         
-        return EstimatedCodewords
+        return HARQ_ACK, EstimatedCodewords
 
         
 if __name__ == "__main__":
-    baseGraph = 1
+    baseGraph = 2
     i_LS = 7
     Z_c = 60
     num_testing_cb = 10

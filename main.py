@@ -42,7 +42,7 @@ if __name__ == '__main__':
         lambda_bar = 0,
         n_SCID = 0,
         NFFT = 1024,
-        maxIter = 50
+        maxIter = 10
     )
 
     ChannelConfig = RayleighFadingConfig(
@@ -52,31 +52,58 @@ if __name__ == '__main__':
         delayPower_dB = [0, -3, -6],
         Ts = 1 / (1024 * 30e3),         # 1 / Fs where Fs = NFFT * delta_f
         T_slot = 1 / 30e3,              # T_slot = 1 / delta_f
-        nOFDMSymbolsPerSlot = 14
+        nOFDMSymbolsPerSlot = 14,
+        NFFT = 1024
     )
     
     DEBUG_MODE = False
     logging_level(DEBUG_MODE)
     rng = np.random.default_rng()
-    SNR = list(range(-4,7,2))
-    nMC = 2
+    EsN0_dB = list(range(-5,20,5))
+    nMC = 100
+    HARQ_number = 0
 
     ThisSimulator = Simulator(TxConfig, RxConfig, ChannelConfig)
-    Results = np.zeros((len(SNR),nMC), dtype=bool)
-    SuccessRate = np.zeros(len(SNR))
-    for i,snr in enumerate(SNR):
-        logging.info(f"===== Simulation under SNR {snr}dB =====")
+    Results = np.zeros((len(EsN0_dB),nMC), dtype=bool)
+    SuccessRate = np.zeros(len(EsN0_dB))
+    NMSE_dB = np.zeros(len(EsN0_dB))
+    EVM = np.zeros(len(EsN0_dB))
+    CodedBER = np.zeros(len(EsN0_dB))
+
+    for i,EsN0 in enumerate(EsN0_dB):
+        logging.info(f"===== Simulation under Es/N0 {EsN0} dB =====")
+        total_error_power = 0
+        total_channel_power = 0
+        totalEVM = 0
+        totalCodedBER = 0
+
         for m in range(nMC):
-            isSuccess = ThisSimulator.process(DEBUG_MODE, snr)
-            if isSuccess:
+            results = ThisSimulator.process(DEBUG_MODE, EsN0, HARQ_number)
+            total_error_power += results["error_power"]
+            total_channel_power += results["channel_power"]
+            totalEVM += results["evm"]
+            totalCodedBER += results["coded_ber"]
+
+            if results["isSuccess"]:
                 logging.info(f"Transmission {m+1}: Success")
             else:
                 logging.info(f"Transmission {m+1}: Failure")
-            Results[i,m] = isSuccess
+            Results[i,m] = results["isSuccess"]
+
+        NMSE_dB[i] = 10 * np.log10((total_error_power / total_channel_power))
+        EVM[i] = totalEVM / nMC * 100
+        CodedBER[i] = totalCodedBER / nMC * 100
         SuccessRate[i] = np.mean(Results[i]) * 100
+        logging.info(f"-- NMSE: {NMSE_dB[i]:.3f} dB")
+        logging.info(f"-- EVM: {EVM[i]:.3f} %")
+        logging.info(f"-- Coded BER: {CodedBER[i]:.3f} %")
         logging.info(f"-- Success rate: {SuccessRate[i]:.3f}%\n")
     
     logging.info("===== Overall Summary =====")
-    for i,snr in enumerate(SNR):
-        logging.info(f"SNR {snr}dB: {SuccessRate[i]:.3f}% success")
+    for i,EsN0 in enumerate(EsN0_dB):
+        logging.info(f"SNR {EsN0} dB:")
+        logging.info(f"   NMSE {NMSE_dB[i]:.3f} dB")
+        logging.info(f"   EVM {EVM[i]:.3f} %")
+        logging.info(f"   Coded BER {CodedBER[i]:.3f} %")
+        logging.info(f"   Success rate {SuccessRate[i]:.3f}%\n")
     

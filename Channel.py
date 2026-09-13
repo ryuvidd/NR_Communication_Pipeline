@@ -10,25 +10,25 @@ class RayleighFadingConfig:
     Ts: float
     T_slot: float
     nOFDMSymbolsPerSlot: int
+    NFFT: int
 
 class NoiseMixer():
-    def process(self, ChannelOutputSymbols: list[np.ndarray], SNR: float) -> tuple:
-        ChannelOutput = []
-        SNRlinear = 10 ** (SNR / 10)
+    def __init__(self, NFFT: int, EsN0_dB: float):
+        self.EsN0_dB = EsN0_dB
+        self.NFFT = NFFT
 
-        SignalPower = np.zeros(len(ChannelOutputSymbols))
-        for l,symbol in enumerate(ChannelOutputSymbols):
-            SignalPower[l] = np.mean(np.abs(symbol) ** 2)
-        SignalPower = np.mean(SignalPower[SignalPower > 0])
-        NoisePower = SignalPower / SNRlinear
-        VarNoise = NoisePower
+    def process(self, ChannelOutputSymbols: list[np.ndarray]) -> tuple:
+        Es = 1
+        EsN0_linear = 10 ** (self.EsN0_dB / 10)
+        N0 = Es / EsN0_linear
+        noise_power = N0 / self.NFFT
         
-        for l,symbol in enumerate(ChannelOutputSymbols):
-            Noise = np.sqrt(NoisePower / 2) * (np.random.randn(symbol.size) + 1j * np.random.randn(symbol.size))
-            self.Noise = Noise
+        ChannelOutput = []
+        for symbol in ChannelOutputSymbols:
+            Noise = np.sqrt(noise_power / 2) * (np.random.randn(symbol.size) + 1j * np.random.randn(symbol.size))
             ChannelOutput.append(symbol + Noise)
 
-        return ChannelOutput, VarNoise
+        return ChannelOutput, N0
 
 class RayleighFadingChannel():
     def __init__(self, config:RayleighFadingConfig):
@@ -39,6 +39,7 @@ class RayleighFadingChannel():
         self.T_slot = config.T_slot
         self.L = config.nOFDMSymbolsPerSlot
         self.T_symbol = self.T_slot / self.L
+        self.NFFT = config.NFFT
 
         Doppler = self.velocity * self.fc / 299792458
         self.coherenceTime = 0.423 / Doppler
@@ -58,10 +59,11 @@ class RayleighFadingChannel():
 
         self.delays_sample = np.round(self.delays_ns * 1e-9 / self.Ts).astype(int)
 
-        self.Channels = self.__generate_channels__()
+        self.Channels, self.ChannelFrequency = self.__generate_channels__()
 
-    def __generate_channels__(self) -> list[np.ndarray]:
+    def __generate_channels__(self) -> tuple[list[np.ndarray], np.ndarray]:
         channels = []
+        channelFrequency = []
 
         nRealization = 1 if self.ConstantOver == "SLOT" else self.L
         maxDelay = np.max(self.delays_sample)
@@ -71,19 +73,24 @@ class RayleighFadingChannel():
             h = np.sqrt(0.5) * (np.random.randn(self.nTap) + 1j * np.random.randn(self.nTap))
             channel = np.zeros(maxDelay + 1, dtype=np.complex128)
             for tap, delay in enumerate(self.delays_sample):
-                channel[delay] = h[tap] * np.sqrt(self.power_linear[tap])
+                channel[delay] += h[tap] * np.sqrt(self.power_linear[tap])
             channels.append(channel)
+
+            channelFrequency.append(np.fft.fftshift(np.fft.fft(channel, n=self.NFFT)))
 
         if self.ConstantOver == "SLOT":
             channels = [channels[0]] * self.L
+            channelFrequency = [channelFrequency[0]] * self.L
 
-        return channels
+        channelFrequency = np.array(channelFrequency).T
+        return channels, channelFrequency
 
     def process(self, TransmittedSymbols: list[np.ndarray]):
 
         ChannelOutputs = []
         for l,symbol in enumerate(TransmittedSymbols):
             ChannelOutputs.append(np.convolve(symbol, self.Channels[l]))
+            
         return ChannelOutputs
 
             
@@ -114,7 +121,8 @@ if __name__ == '__main__':
         delayPower_dB = [0, -3, -6],
         Ts = 3.2e-8,
         T_slot = 1 / 30e-9,
-        nOFDMSymbolsPerSlot = 14
+        nOFDMSymbolsPerSlot = 14,
+        NFFT = 1024
     )
 
     TxWave = [np.arange(100)] * 14

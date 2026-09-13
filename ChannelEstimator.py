@@ -36,8 +36,8 @@ class LSEstimator():
             
     def __estimate_channels__(self, EstimatedGrid: np.ndarray, DMRSs: dict) -> np.ndarray:
         EstimatedDMRSsChannel = np.zeros_like(EstimatedGrid)
-        dmrs_idx = 0
         for l, dmrs in DMRSs.items():
+            dmrs_idx = 0
             for prb in self.allocatedPRB:
                 start_k = prb * 12
                 for k in range(start_k, start_k + 12):
@@ -70,8 +70,12 @@ class LSEstimator():
         if len(l_positions) > 1:
             l_interpolate = np.arange(l_positions[0], l_positions[-1]+1)
             for k in range(start_k, last_k+1):
-                EstimatedChannels[k,l_positions[0]:l_positions[-1]+1] = np.interp(l_interpolate, l_positions, EstimatedChannels[k, l_positions])                
-
+                EstimatedChannels[k,l_positions[0]:l_positions[-1]+1] = np.interp(l_interpolate, l_positions, EstimatedChannels[k, l_positions])
+        
+        for l in range(nSymbols):
+            if l not in self.allocatedPDSCHSymbols:
+                EstimatedChannels[:,l] = 0
+                
         return EstimatedChannels
 
     def process(self, EstimatedGrid: np.ndarray, DMRSs: dict) -> np.ndarray:

@@ -64,15 +64,13 @@ class QAMDemapper:
         constellation = (I + 1j * Q) / normalization
         return constellation, bit_labels
 
-    def process(self, ReceivedSymbols: list[np.ndarray], noiseVariance: float) -> list[np.ndarray]:
+    def process(self, ReceivedCodewords: list[np.ndarray], VarNoise: list[np.ndarray]) -> list[np.ndarray]:
 
         codewordLLRs = []
-        for l,symbols in enumerate(ReceivedSymbols):
-            if noiseVariance <= 0:
-                raise ValueError("noiseVariance must be positive.")
+        for c,codeword in enumerate(ReceivedCodewords):
 
-            distances = np.abs(symbols[:, None] - self.constellation[None, :]) ** 2
-            LLRs = np.empty((len(symbols), self.Qm), dtype=np.float64)
+            distances = np.abs(codeword[:, None] - self.constellation[None, :]) ** 2
+            LLRs = np.empty((len(codeword), self.Qm), dtype=np.float64)
             for bit_position in range(self.Qm):
                 mask_0 = (self.bit_labels[:, bit_position] == 0)
                 mask_1 = (self.bit_labels[:, bit_position] == 1)
@@ -80,7 +78,7 @@ class QAMDemapper:
                 min_distance_0 = np.min(distances[:, mask_0], axis=1)
                 min_distance_1 = np.min(distances[:, mask_1], axis=1)
 
-                LLRs[:, bit_position] = (min_distance_1 - min_distance_0) / noiseVariance
+                LLRs[:, bit_position] = (min_distance_1 - min_distance_0) / VarNoise[c]
 
             codewordLLRs.append(LLRs.reshape(-1))
         return codewordLLRs
@@ -92,7 +90,7 @@ if __name__ == '__main__':
     bits = np.random.randint(0, 2, NumBits)
     ThisQAMMapper = QAMMapper(Qm)
     ModulatedSymbols = ThisQAMMapper.process([bits])
-    VarNoise = 1e-10
+    VarNoise = [np.array(1e-10)]
 
     ThisQAMDemapper = QAMDemapper(Qm)
     LLRs = ThisQAMDemapper.process(ModulatedSymbols, VarNoise)

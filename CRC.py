@@ -26,10 +26,12 @@ class CRC:
             oneIndices = [0,1,2,4,8,12,13,15,17,20,21,23,24]
             lengthGenerator = 25
         else: raise(ValueError)
-        return [1 if e in oneIndices else 0 for e in range(lengthGenerator)]
+        generator = np.array([1 if (lengthGenerator - i) in oneIndices else 0 for i in range(lengthGenerator)], dtype=np.uint8)
+        return generator
     
     def attachCRC(self, dataBits: np.ndarray) -> tuple:
         ## Following TS38.212 clause 5.2.2: LDPC CRC and CBS ##
+        dataBits = np.asarray(dataBits, dtype=np.uint8).flatten()
         dividend = np.concatenate((dataBits, np.zeros(self.CRCLength, dtype=dataBits.dtype)))
         remainder = dividend.copy()
         for i in range(len(dataBits)):
@@ -51,26 +53,12 @@ class CRC:
     
 if __name__ == '__main__':
 
-    data_bits = np.array([1, 1, 0, 1, 1, 1, 0, 1, 0, 1], dtype=np.int8)
-    L = '6'
+    rng = np.random.default_rng(0)
 
-    # Encode
-    ThisCRC = CRC(L)
-    codeword, crc = ThisCRC.attachCRC(data_bits)
-
-    print("Information bits :", data_bits)
-    print("Generator        :", ThisCRC.Generator)
-    print("CRC              :", crc)
-    print("Codeword         :", codeword)
-
-    # Check without error
-    result = ThisCRC.check(codeword)
-    print("\nCRC check (no error):", result)
-
-    # Introduce a bit error
-    received = codeword.copy()
-    received[2] ^= 1
-    print("\nReceived bits with error:", received)
-
-    result = ThisCRC.check(received)
-    print("CRC check (with error):", result)
+    data_bits = rng.integers(0, 2, size=100, dtype=np.uint8)
+    for L in['6', '11', '16', '24A', '24B', '24C']:
+        
+        ThisCRC = CRC(L)
+        codeword, crc = ThisCRC.attachCRC(data_bits)
+        result = ThisCRC.check(codeword)
+        print(f"CRC{L} check :{result}")

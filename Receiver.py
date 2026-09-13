@@ -96,7 +96,7 @@ class Receiver():
         )
         self.ChannelEstimator = LSEstimator(temp_config)
         self.Equalizer = ZeroForcingEqualizer(config.allocatedPRB, config.allocatedPDSCHSymbols)
-        self.LayerDemapper = LayerMapper(config.nLayer)
+        self.LayerDemapper = LayerDemapper(config.nLayer)
         self.QAMDemapper = QAMDemapper(config.Qm)
         self.Descrambler = PDSCHDescrambler(config.nRNTI, config.nCodeWord, config.nID)
         temp_config = RateMatchingConfig(
@@ -116,27 +116,40 @@ class Receiver():
         )
         self.LDPCDecoder = LDPCDecoder(temp_config, config.maxIter, self.meta["mask_NULLs"])
         self.CodeBlockCombiner = CodeBlockCombiner(self.meta["LDPCBlockParam"]["C"])
+        self.NFFT = config.NFFT
+        self.NDI = False
 
-    def process(self, ReceivedSignal: list[np.ndarray], VarNoise: float) -> tuple:
+    def process(self, ReceivedSignal: list[np.ndarray], N0: float, HARQ_number, NDI, RV_id) -> tuple:
         EstimatedGrid = self.OFDMDemodulator.process(ReceivedSignal)
         logging.debug("======== Completed restructing resource grid ========")
         DMRSs = self.DMRSGenerator.process()
         EstimatedChannel = self.ChannelEstimator.process(EstimatedGrid, DMRSs)
+        self.meta["EstimatedChannel"] = EstimatedChannel
         logging.debug("======== Completed estimating channel ========")
-        EqualizedGrid = self.Equalizer.process(EstimatedChannel, EstimatedGrid)
+        EqualizedGrid, EffectiveN0 = self.Equalizer.process(EstimatedChannel, EstimatedGrid, N0)
         logging.debug("======== Completed equalizing ========")
-        EstimatedLayerMappedSymbols = self.ResourceDemapper.process(EqualizedGrid)
+        EstimatedLayerMappedSymbols, EffectiveN0 = self.ResourceDemapper.process(EqualizedGrid, EffectiveN0)
         logging.debug("======== Completed restrucing layered symbols ========")
-        EstimatedQAMSymbols = self.LayerDemapper.process(EstimatedLayerMappedSymbols)
+        EstimatedQAMSymbols, EffectiveN0 = self.LayerDemapper.process(EstimatedLayerMappedSymbols, EffectiveN0)
+        self.meta["EstimatedQAMSymbols"] = EstimatedQAMSymbols
         logging.debug("======== Completed estimating QAM symbols ========")
-        LLRs = self.QAMDemapper.process(EstimatedQAMSymbols, VarNoise)
+        LLRs = self.QAMDemapper.process(EstimatedQAMSymbols, EffectiveN0)
+        self.meta["LLRs"] = LLRs
         logging.debug("======== Completed estimating LLRs ========")
         DescrambledLLRs = self.Descrambler.process(LLRs)
         logging.debug("======== Completed descrambling LLRs ========")
-        RateRecoveredLLRs = self.RateRecoverer.process(DescrambledLLRs, self.rv_id)
+        if self.NDI != NDI:
+            self.RateRecoverer.reset_buffer(HARQ_number)
+            self.NDI = NDI
+        RateRecoveredLLRs = self.RateRecoverer.process(DescrambledLLRs, HARQ_number, RV_id)
         logging.debug("======== Completed rate recovery LLRs ========")
-        EstimatedCodeBlocks = self.LDPCDecoder.process(RateRecoveredLLRs)
-        logging.debug("======== Completed estimating code blocks ========")
-        retransmissionCodeBlockIndices, EstimatedTransportBlock = self.CodeBlockCombiner.process(EstimatedCodeBlocks)
-        logging.debug("======== Completed estimating transport block ========")
-        return retransmissionCodeBlockIndices, EstimatedTransportBlock
+        HARQ_ACK, EstimatedCodeBlocks = self.LDPCDecoder.process(RateRecoveredLLRs)
+        if HARQ_ACK == "ACK":
+            logging.debug("======== Completed decoding code blocks ========")
+            HARQ_ACK, EstimatedTransportBlock = self.CodeBlockCombiner.process(EstimatedCodeBlocks)
+            logging.debug("======== Completed estimating transport block ========")
+            return HARQ_ACK, EstimatedTransportBlock
+        else:
+            logging.debug("======== Failed decoding code blocks ========")
+            return HARQ_ACK, np.array(-1)
+        
