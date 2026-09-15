@@ -1,5 +1,4 @@
 from util import *
-from dataclasses import dataclass
 from TBS_generator import *
 from CRC import *
 from LDPC_CBS import *
@@ -12,45 +11,25 @@ from LayerMapping import *
 from DMRSGeneration import *
 from ResourceMapping import *
 from OFDMModulation import *
-
-@dataclass
-class TransmitterConfig:
-    nPRB: int
-    allocatedPRB: list
-    allocatedPDSCHSymbols: list
-    allocatedDMRSPerPRB: list[tuple]
-    nOFDMSymbolsPerSlot: int
-    SubCarrierSpacing: int
-    Qm: int
-    R: float
-    nLayer: int
-    nCodeWord: int
-    rv_id: int
-    nRNTI: int
-    nID: int
-    slotNumInFrame: int
-    N_DMRS_ID: int
-    lambda_bar: int
-    n_SCID: int
-    NFFT: int
+from Configuration import *
 
 class Transmitter():
-    def __init__(self, config: TransmitterConfig):
+    def __init__(self, config:NRSystemConfig):
         logging.debug("..... Initializing configuration setup .....")
+        self.meta = {}
         self.TBSGenerator = TBSGenerator()
         temp_config = TBSGeneratorConfig(
-            numAllocatedPRB = len(config.allocatedPRB),
-            numPDSCHSymbolsPerPRB = len(config.allocatedPDSCHSymbols),
-            numDMRSPerPRB = len(config.allocatedDMRSPerPRB),
-            Qm = config.Qm,
-            R = config.R,
-            nLayer = config.nLayer
+            numAllocatedPRB = len(config.bwp.allocatedPRB),
+            numPDSCHSymbolsPerPRB = len(config.pdsch.allocatedSymbols),
+            numDMRSPerPRB = len(config.dmrs.allocatedDMRSPerPRB),
+            Qm = config.pdsch.Qm,
+            R = config.pdsch.R,
+            nLayer = config.pdsch.nLayer
         )
-        self.meta = {}
         param = self.TBSGenerator.generate(temp_config)
         self.meta["TBS"] = param["TBS"]
         self.meta["G"] = param["G"]
-        self.meta["baseGraph"] = selectLDPCBaseGraph(self.meta["TBS"], config.R)
+        self.meta["baseGraph"] = selectLDPCBaseGraph(self.meta["TBS"], config.pdsch.R)
         self.CodeBlockSegmenter = CodeBlockSegmenter(self.meta["baseGraph"])
         self.meta["LDPCBlockParam"] = self.CodeBlockSegmenter.getLDPCBlockParam(self.meta["TBS"])
         temp_config = LDPCConfig(
@@ -61,46 +40,46 @@ class Transmitter():
         )
         self.Encoder = LDPCEncoder(temp_config)
         temp_config = RateMatchingConfig(
-            nLayer = config.nLayer,
-            Qm = config.Qm,
+            nLayer = config.pdsch.nLayer,
+            Qm = config.pdsch.Qm,
             baseGraph = self.meta["baseGraph"],
             Z_c = self.meta["LDPCBlockParam"]["Z_c"],
             G = self.meta["G"]
         )
-        self.rv_id = config.rv_id
+        self.rv_id = config.harq.rv_id
         self.RateMatcher = RateMatcher(temp_config)
         self.CodeBlockConcatenator = CodeBlockConcatenator()
-        self.Scrambler = PDSCHScrambler(config.nRNTI, config.nCodeWord, config.nID)
-        self.QAMMapper = QAMMapper(config.Qm)
-        self.LayerMapper = LayerMapper(config.nLayer)
+        self.Scrambler = PDSCHScrambler(config.scrambling.nRNTI, config.scrambling.nID)
+        self.QAMMapper = QAMMapper(config.pdsch.Qm)
+        self.LayerMapper = LayerMapper(config.pdsch.nLayer)
         temp_config = PDSCH_DMRS_GeneratorConfig(
-            nOFDMSymbolsPerSlot = config.nOFDMSymbolsPerSlot,
-            allocatedDMRSPerPRB = config.allocatedDMRSPerPRB,
-            allocatedPRB = config.allocatedPRB,
-            slotNumInFrame = config.slotNumInFrame,
-            N_DMRS_ID = config.N_DMRS_ID,
-            lambda_bar = config.lambda_bar,
-            n_SCID = config.n_SCID
+            nOFDMSymbolsPerSlot = config.carrier.nOFDMSymbolsPerSlot,
+            allocatedDMRSPerPRB = config.dmrs.allocatedDMRSPerPRB,
+            allocatedPRB = config.bwp.allocatedPRB,
+            slotNumInFrame = config.pdsch.slotNumInFrame,
+            N_DMRS_ID = config.dmrs.N_DMRS_ID,
+            lambda_bar = config.dmrs.lambda_bar,
+            n_SCID = config.dmrs.n_SCID
         )
         self.DMRSGenerator = PDSCH_DMRS_Generator(temp_config)
         temp_config = ResourceMappingConfig(
-            nPRB = config.nPRB,
-            allocatedPRB = config.allocatedPRB,
-            allocatedPDSCHSymbols = config.allocatedPDSCHSymbols,
-            allocatedDMRSPerPRB = config.allocatedDMRSPerPRB,
-            nLayer = config.nLayer,
-            nOFDMSymbolsPerSlot = config.nOFDMSymbolsPerSlot,
-            slotNumInFrame = config.slotNumInFrame,
-            N_DMRS_ID = config.N_DMRS_ID,
-            lambda_bar = config.lambda_bar,
-            n_SCID = config.n_SCID
+            nPRB = config.carrier.nPRB,
+            allocatedPRB = config.bwp.allocatedPRB,
+            allocatedPDSCHSymbols = config.pdsch.allocatedSymbols,
+            allocatedDMRSPerPRB = config.dmrs.allocatedDMRSPerPRB,
+            nLayer = config.pdsch.nLayer,
+            nOFDMSymbolsPerSlot = config.carrier.nOFDMSymbolsPerSlot,
+            slotNumInFrame = config.pdsch.slotNumInFrame,
+            N_DMRS_ID = config.dmrs.N_DMRS_ID,
+            lambda_bar = config.dmrs.lambda_bar,
+            n_SCID = config.dmrs.n_SCID
         )
         self.ResourceMapper = ResourceMapper(temp_config)
         temp_config = OFDMModulationConfig(
-            nPRB = config.nPRB,
-            nOFDMSymbolsPerSlot = config.nOFDMSymbolsPerSlot,
-            SubcarrierSpacing = config.SubCarrierSpacing,
-            NFFT = config.NFFT
+            nPRB = config.carrier.nPRB,
+            nOFDMSymbolsPerSlot = config.carrier.nOFDMSymbolsPerSlot,
+            SubcarrierSpacing = config.carrier.subcarrierSpacing,
+            NFFT = config.carrier.NFFT
         )
         self.OFDMModulator = OFDMModulator(temp_config)
         self.NDI = False

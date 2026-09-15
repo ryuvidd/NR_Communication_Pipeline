@@ -1,11 +1,25 @@
 import numpy as np
+from dataclasses import dataclass
+from enum import Enum
+from Configuration import *
+
+@dataclass
+class EqualizerConfig:
+    allocatedPRB: list
+    allocatedPDSCHSymbols: list
+
+def select_equalizer(equalizer_type: EQUALIZER, config: EqualizerConfig):
+    if equalizer_type == EQUALIZER.ZF:
+        return ZeroForcingEqualizer(config)
+    else:
+        raise ValueError("Only support Equalizer for now")
 
 class ZeroForcingEqualizer():
-    def __init__(self, allocatedPRB, allocatedPDSCHSymbols) -> None:
-        start_k = allocatedPRB[0] * 12
-        last_k = allocatedPRB[-1] * 12 + 11
+    def __init__(self, config:EqualizerConfig) -> None:
+        start_k = config.allocatedPRB[0] * 12
+        last_k = config.allocatedPRB[-1] * 12 + 11
         self.allocated_k = [k for k in range(start_k,last_k+1)]
-        self.allocated_l = allocatedPDSCHSymbols
+        self.allocated_l = config.allocatedPDSCHSymbols
 
     def process(self, EstimatedChannel: np.ndarray, EstimatedGrid: np.ndarray, N0: float) -> tuple[np.ndarray, np.ndarray]:
         eps = 1e-12

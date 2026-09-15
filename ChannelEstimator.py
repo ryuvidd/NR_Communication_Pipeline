@@ -1,5 +1,6 @@
 import numpy as np
 from dataclasses import dataclass
+from Configuration import *
 
 @dataclass
 class ChannelEstimatorConfig:
@@ -8,6 +9,11 @@ class ChannelEstimatorConfig:
     allocatedDMRSPerPRB: list[tuple]
     RETypeGrid: np.ndarray
 
+def select_estimator(estimator_type: CHANNEL_ESTIMATOR, config: ChannelEstimatorConfig):
+    if estimator_type == CHANNEL_ESTIMATOR.LS:
+        return LSEstimator(config)
+    else:
+        raise ValueError("Only support LS Estimator for now")
 
 class LSEstimator():
     def __init__(self, config: ChannelEstimatorConfig):
