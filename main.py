@@ -14,11 +14,13 @@ if __name__ == '__main__':
         receiver=receiverConfig,
     )
     
+    save_fig_name = "figs/Results_.png"
+    
     DEBUG_MODE = False
     logging_level(DEBUG_MODE)
     rng = np.random.default_rng()
     EsN0_dB = list(range(-4,11,2))
-    nMC = 2
+    nMC = 50
     HARQ_number = 0
 
     ThisSimulator = Simulator(config)
@@ -28,6 +30,7 @@ if __name__ == '__main__':
         logging.info(f"===== Simulation under Es/N0 {EsN0} dB =====")
         for m in range(nMC):
             results = ThisSimulator.process(DEBUG_MODE, EsN0, HARQ_number)
+            get_channel_stat = False
             ThisResultsEvaluator.save_results(results, i, m)
 
             if results["bler"] == 0:
@@ -46,6 +49,5 @@ if __name__ == '__main__':
         "TB_BER": ThisResultsEvaluator.TransportBlockBER,
         "BLER": ThisResultsEvaluator.BLER
     }
-    save_fig_name = "figs/Results.png"
     plot_results(EsN0_dB, Plotting_results, save_fig_name)
     

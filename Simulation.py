@@ -26,14 +26,24 @@ class Simulator():
         NDI = self.reset()
 
         for rv_id in RV_id:
+            meta = {}
             TransmittedSymbols = self.Transmitter.process(InformationData, HARQ_number, NDI, rv_id)
             logging.debug("...................................")
             logging.debug("...... Transmitted Wave Form ......")
-            ChannelOutputs = self.Channel.process(TransmittedSymbols, Ts=1/self.Transmitter.OFDMModulator.Fs, subcarrierSpacing=self.Transmitter.OFDMModulator.delta_f, NFFT=self.Transmitter.OFDMModulator.NFFT)
-            self.AWGNChannel = AWGNChannel(self.Receiver.NFFT, EsN0_dB)
-            ReceivedSignal, N0 = self.AWGNChannel.process(ChannelOutputs)
+            channel_input = {
+                "TransmittedSymbols": TransmittedSymbols,
+                "Ts": 1/self.Transmitter.OFDMModulator.Fs,
+                "subcarrierSpacing": self.Transmitter.OFDMModulator.delta_f,
+                "NFFT": self.Transmitter.OFDMModulator.NFFT
+            }
+            ChannelOutputs = self.Channel.process(channel_input)
+            self.AWGNChannel = AWGNChannel(self.Transmitter.OFDMModulator.NFFT, EsN0_dB)
+            ReceivedSignal, NoiseVar = self.AWGNChannel.process(ChannelOutputs)
+            meta["mean_h"] = self.Channel.mean_h
+            meta["R_hh"] = self.Channel.R_hh
+            meta["NoiseVar"] = NoiseVar
             logging.debug("...................................")
-            HARQ_ACK, EstimatedTransportBlock = self.Receiver.process(ReceivedSignal, N0, HARQ_number, NDI, rv_id)
+            HARQ_ACK, EstimatedTransportBlock = self.Receiver.process(ReceivedSignal, HARQ_number, NDI, rv_id, meta)
             if HARQ_ACK == "ACK":
                 break
         

@@ -64,12 +64,12 @@ class QAMDemapper:
         constellation = (I + 1j * Q) / normalization
         return constellation, bit_labels
 
-    def process(self, ReceivedCodewords: list[np.ndarray], VarNoise: list[np.ndarray]) -> list[np.ndarray]:
+    def process(self, ReceivedCodewords: list[np.ndarray], meta: dict) -> list[np.ndarray]:
 
         codewordLLRs = []
         for c,codeword in enumerate(ReceivedCodewords):
-
-            distances = np.abs(codeword[:, None] - self.constellation[None, :]) ** 2
+            scaled_constellation = meta["gain"][c][:, None] * self.constellation[None, :]
+            distances = np.abs(codeword[:, None]  -  scaled_constellation) ** 2
             LLRs = np.empty((len(codeword), self.Qm), dtype=np.float64)
             for bit_position in range(self.Qm):
                 mask_0 = (self.bit_labels[:, bit_position] == 0)
@@ -78,7 +78,7 @@ class QAMDemapper:
                 min_distance_0 = np.min(distances[:, mask_0], axis=1)
                 min_distance_1 = np.min(distances[:, mask_1], axis=1)
 
-                LLRs[:, bit_position] = (min_distance_1 - min_distance_0) / VarNoise[c]
+                LLRs[:, bit_position] = (min_distance_1 - min_distance_0) / meta["EffectiveVarNoise"][c]
 
             codewordLLRs.append(LLRs.reshape(-1))
         return codewordLLRs
@@ -91,9 +91,14 @@ if __name__ == '__main__':
     ThisQAMMapper = QAMMapper(Qm)
     ModulatedSymbols = ThisQAMMapper.process([bits])
     VarNoise = [np.array(1e-10)]
+    gain = [np.array(1)]
+    meta = {
+        "EffectiveVarNoise": VarNoise,
+        "gain": gain
+    }
 
     ThisQAMDemapper = QAMDemapper(Qm)
-    LLRs = ThisQAMDemapper.process(ModulatedSymbols, VarNoise)
+    LLRs = ThisQAMDemapper.process(ModulatedSymbols, meta)
     print('Assume ideal mapping...')
     EstimatedBits = np.array([1 if llr < 0 else 0 for llr in LLRs[0]])
     print("Maximum absolute difference: ", np.max(np.abs(bits - EstimatedBits)))

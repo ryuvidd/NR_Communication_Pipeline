@@ -3,9 +3,11 @@ from enum import Enum
 
 class CHANNEL_ESTIMATOR(Enum):
     LS = "LS"
+    LMMSE = "LMMSE"
 
 class EQUALIZER(Enum):
     ZF = "ZF"
+    MMSE = "MMSE"
 
 class CHANNEL_MODEL(Enum):
     Rayleigh = "Rayleigh"
@@ -127,7 +129,7 @@ channelConfig = ChannelConfig(
 
 receiverConfig = ReceiverConfig(
     maxLDPCIterations=10,
-    equalizerType=EQUALIZER.ZF,
-    channelEstimatorType=CHANNEL_ESTIMATOR.LS,
+    equalizerType=EQUALIZER.MMSE,
+    channelEstimatorType=CHANNEL_ESTIMATOR.LMMSE,
 )
     

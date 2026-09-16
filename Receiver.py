@@ -102,21 +102,24 @@ class Receiver():
         self.NFFT = config.carrier.NFFT
         self.NDI = False
 
-    def process(self, ReceivedSignal: list[np.ndarray], N0: float, HARQ_number, NDI, RV_id) -> tuple:
+    def process(self, ReceivedSignal: list[np.ndarray], HARQ_number:int, NDI:bool, RV_id:int, meta: dict) -> tuple:
+        self.meta["NoiseVar"] = meta["NoiseVar"]
+        self.meta["mean_h"] = meta["mean_h"]
+        self.meta["R_hh"] = meta["R_hh"]
         EstimatedGrid = self.OFDMDemodulator.process(ReceivedSignal)
         logging.debug("======== Completed restructing resource grid ========")
         DMRSs = self.DMRSGenerator.process()
-        EstimatedChannel = self.ChannelEstimator.process(EstimatedGrid, DMRSs)
+        EstimatedChannel = self.ChannelEstimator.process(EstimatedGrid, DMRSs, self.meta)
         self.meta["EstimatedChannel"] = EstimatedChannel
         logging.debug("======== Completed estimating channel ========")
-        EqualizedGrid, EffectiveN0 = self.Equalizer.process(EstimatedChannel, EstimatedGrid, N0)
+        EqualizedGrid, self.meta = self.Equalizer.process(EstimatedChannel, EstimatedGrid, self.meta)
         logging.debug("======== Completed equalizing ========")
-        EstimatedLayerMappedSymbols, EffectiveN0 = self.ResourceDemapper.process(EqualizedGrid, EffectiveN0)
+        EstimatedLayerMappedSymbols, self.meta = self.ResourceDemapper.process(EqualizedGrid, self.meta)
         logging.debug("======== Completed restrucing layered symbols ========")
-        EstimatedQAMSymbols, EffectiveN0 = self.LayerDemapper.process(EstimatedLayerMappedSymbols, EffectiveN0)
+        EstimatedQAMSymbols, self.meta = self.LayerDemapper.process(EstimatedLayerMappedSymbols, self.meta)
         self.meta["EstimatedQAMSymbols"] = EstimatedQAMSymbols
         logging.debug("======== Completed estimating QAM symbols ========")
-        LLRs = self.QAMDemapper.process(EstimatedQAMSymbols, EffectiveN0)
+        LLRs = self.QAMDemapper.process(EstimatedQAMSymbols, self.meta)
         self.meta["LLRs"] = LLRs
         logging.debug("======== Completed estimating LLRs ========")
         DescrambledLLRs = self.Descrambler.process(LLRs)

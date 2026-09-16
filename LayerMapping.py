@@ -65,15 +65,19 @@ class LayerDemapper():
 
         return output
 
-    def process(self, LayerMappedSymbols: list[np.ndarray], EffectiveVarNoise: list[np.ndarray]) -> tuple[list[np.ndarray], list[np.ndarray]]:
+    def process(self, LayerMappedSymbols: list[np.ndarray], meta: dict) -> tuple[list[np.ndarray], dict]:
 
         if len(LayerMappedSymbols) != self.nLayer:
             raise ValueError(f"Expected {self.nLayer} layers, but received {len(LayerMappedSymbols)}.")
 
         if self.nLayer <= 4:
             d0 = self.__combine_layers__(LayerMappedSymbols)
-            d0_varNoise = self.__combine_layers__(EffectiveVarNoise)
-            return [d0], [d0_varNoise]
+            d0_varNoise = self.__combine_layers__(meta["EffectiveVarNoise"])
+            d0_gain = self.__combine_layers__(meta["gain"])
+
+            meta["EffectiveVarNoise"] = [d0_varNoise]
+            meta["gain"] = [d0_gain]
+            return [d0], meta
         else:
             d0_layers = LayerMappedSymbols[:self.d0_num]
             d1_layers = LayerMappedSymbols[self.d0_num:]
@@ -81,13 +85,22 @@ class LayerDemapper():
             d0 = self.__combine_layers__(d0_layers)
             d1 = self.__combine_layers__(d1_layers)
 
-            d0_layers_varNoise = EffectiveVarNoise[:self.d0_num]
-            d1_layers_varNoise = EffectiveVarNoise[self.d0_num:]
+            d0_layers_varNoise = meta["EffectiveVarNoise"][:self.d0_num]
+            d1_layers_varNoise = meta["EffectiveVarNoise"][self.d0_num:]
 
             d0_varNoise = self.__combine_layers__(d0_layers_varNoise)
             d1_varNoise = self.__combine_layers__(d1_layers_varNoise)
 
-            return [d0, d1], [d0_varNoise, d1_varNoise]
+            d0_layers_gain = meta["gain"][:self.d0_num]
+            d1_layers_gain = meta["gain"][self.d0_num:]
+
+            d0_gain = self.__combine_layers__(d0_layers_gain)
+            d1_gain = self.__combine_layers__(d1_layers_gain)
+
+            meta["EffectiveVarNoise"] = [d0_varNoise, d1_varNoise]
+            meta["gain"] = [d0_gain, d1_gain]
+
+            return [d0, d1], meta
     
 # if __name__ == '__main__':
     # nLayer = 6

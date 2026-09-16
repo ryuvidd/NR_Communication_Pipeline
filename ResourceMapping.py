@@ -93,7 +93,7 @@ class ResourceDemapper():
         
         return RETypegrid
 
-    def process(self, EstimatedGrid: np.ndarray, EffectiveVarNoise: np.ndarray) -> tuple[list[np.ndarray], list[np.ndarray]]:
+    def process(self, EstimatedGrid: np.ndarray, meta:dict) -> tuple[list[np.ndarray], dict]:
         expected_shape = (self.nPRB * 12, self.nOFDMSymbolsPerSlot)
         if EstimatedGrid.shape != expected_shape:
             raise ValueError(f"Expected EstimatedGrid shape {expected_shape}, but received {EstimatedGrid.shape}.")
@@ -102,6 +102,7 @@ class ResourceDemapper():
 
         LayerMappedSymbols = [[]]
         LayerMappedEffectiveVarNoise = [[]]
+        LayerMappedGain = [[]]
         for l in self.allocatedPDSCHSymbols:
             for prb in self.allocatedPRB:
                 start_k = prb * 12
@@ -109,12 +110,17 @@ class ResourceDemapper():
                     REType = self.RETypeGrid[k, l]
                     if REType == "PDSCH_DATA":
                         LayerMappedSymbols[0].append(EstimatedGrid[k, l])
-                        LayerMappedEffectiveVarNoise[0].append(EffectiveVarNoise[k, l])
+                        LayerMappedEffectiveVarNoise[0].append(meta["EffectiveVarNoise"][k, l])
+                        LayerMappedGain[0].append(meta["gain"][k,l])
 
         LayerMappedSymbols = [np.asarray(LayerMappedSymbols[0], dtype=EstimatedGrid.dtype)]
-        LayerMappedEffectiveVarNoise = [np.asarray(LayerMappedEffectiveVarNoise[0], dtype=EffectiveVarNoise.dtype)]
+        LayerMappedEffectiveVarNoise = [np.asarray(LayerMappedEffectiveVarNoise[0], dtype=meta["EffectiveVarNoise"].dtype)]
+        LayerMappedGain = [np.asarray(LayerMappedGain[0], dtype=meta["gain"].dtype)]
 
-        return LayerMappedSymbols, LayerMappedEffectiveVarNoise
+        meta["EffectiveVarNoise"] = LayerMappedEffectiveVarNoise
+        meta["gain"] = LayerMappedGain
+
+        return LayerMappedSymbols, meta
     
 if __name__ == "__main__":
     config = ResourceMappingConfig(
@@ -141,15 +147,14 @@ if __name__ == "__main__":
     REMapper = ResourceMapper(config)
     grid = REMapper.process(LayerMappedSymbols, DMRSs)
     effectiveVarNoise = REMapper.process(LayerMappedSymbols, DMRSs)
+    gain = REMapper.process(LayerMappedSymbols, DMRSs)
+    meta = {
+        "EffectiveVarNoise": effectiveVarNoise,
+        "gain": gain
+    }
     REDemapper = ResourceDemapper(config)
-    EstimatedLayerMappedSymbols, ReceivedDMRSs = REDemapper.process(grid, effectiveVarNoise)
+    EstimatedLayerMappedSymbols, meta = REDemapper.process(grid, meta)
     
     print("=== Layer mapped symbols ===")
     print("Maximum absolute difference: ", np.max(np.abs(LayerMappedSymbols[0] - EstimatedLayerMappedSymbols[0])))
     print("No significant error: ", np.allclose(LayerMappedSymbols[0], EstimatedLayerMappedSymbols[0]))
-
-    print("=== DMRS ===")
-    for l in DMRSs:
-        print(f"Position: l{l}")
-        print("Maximum absolute difference: ", np.max(np.abs(DMRSs[l] - ReceivedDMRSs[l])))
-        print("No significant error: ", np.allclose(DMRSs[l], ReceivedDMRSs[l]))
