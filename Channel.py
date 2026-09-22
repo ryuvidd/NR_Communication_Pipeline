@@ -81,6 +81,7 @@ class RayleighFadingChannel():
         return channels, channelFrequency
     
     def get_stat_info(self, L: int, NFFT: int, nMonteCarlo:int):
+        np.random.seed(10)
         ChannelFreq = np.zeros((nMonteCarlo, NFFT), dtype=np.complex128)
         for m in range(nMonteCarlo):
             _, ThisChannelFreq = self.generate_channels(L, NFFT)
@@ -104,10 +105,10 @@ class RayleighFadingChannel():
         L = len(TransmittedSymbols)
 
         self.ConstantOver, self.delays_sample = self.compare_coherence_time(Ts, subcarrierSpacing)
-        self.Channels, self.ChannelFrequency = self.generate_channels(L, NFFT)
         if not self.already_got_stat:
             self.get_stat_info(L, NFFT, nMonteCarlo=1000)
 
+        self.Channels, self.ChannelFrequency = self.generate_channels(L, NFFT)
         ChannelOutputs = []
         for l,symbol in enumerate(TransmittedSymbols):
             ChannelOutputs.append(np.convolve(symbol, self.Channels[l]))
@@ -129,7 +130,6 @@ class AWGNChannel():
         for symbol in ChannelOutputSymbols:
             Noise = np.sqrt(noise_power / 2) * (np.random.randn(symbol.size) + 1j * np.random.randn(symbol.size))
             ChannelOutput.append(symbol + Noise)
-
         return ChannelOutput, N0
 
 if __name__ == '__main__':

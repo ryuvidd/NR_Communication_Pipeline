@@ -18,9 +18,12 @@ def select_equalizer(equalizer_type: EQUALIZER, config: EqualizerConfig):
     
 class MMSE_Equalizer():
     def __init__(self, config: EqualizerConfig):
-        start_k = config.allocatedPRB[0] * 12
-        last_k = config.allocatedPRB[-1] * 12 + 11
-        self.allocated_k = [k for k in range(start_k,last_k+1)]
+        allocatedSubcarriers = []
+        for prb in config.allocatedPRB:
+            start_sc = prb * 12
+            end_sc = start_sc + 12
+            allocatedSubcarriers.extend(range(start_sc, end_sc))
+        self.allocatedSubcarriers = allocatedSubcarriers
         self.allocated_l = config.allocatedPDSCHSymbols
 
     def process(self, EstimatedChannel: np.ndarray, EstimatedGrid: np.ndarray, meta:dict) -> tuple[np.ndarray, dict]:
@@ -29,7 +32,7 @@ class MMSE_Equalizer():
         EqualizedGrid = np.zeros_like(EstimatedChannel, dtype=np.complex128)
         EffectiveVarNoise = np.zeros_like(EstimatedChannel, dtype=float)
         gain = np.zeros_like(EstimatedChannel, dtype=float)
-        for k in self.allocated_k:
+        for k in self.allocatedSubcarriers:
             for l in self.allocated_l:
                 H = EstimatedChannel[k, l]
                 Y = EstimatedGrid[k, l]
@@ -47,9 +50,12 @@ class MMSE_Equalizer():
 
 class ZeroForcingEqualizer():
     def __init__(self, config:EqualizerConfig):
-        start_k = config.allocatedPRB[0] * 12
-        last_k = config.allocatedPRB[-1] * 12 + 11
-        self.allocated_k = [k for k in range(start_k,last_k+1)]
+        allocatedSubcarriers = []
+        for prb in config.allocatedPRB:
+            start_sc = prb * 12
+            end_sc = start_sc + 12
+            allocatedSubcarriers.extend(range(start_sc, end_sc))
+        self.allocatedSubcarriers = allocatedSubcarriers
         self.allocated_l = config.allocatedPDSCHSymbols
 
     def process(self, EstimatedChannel: np.ndarray, EstimatedGrid: np.ndarray, meta: dict) -> tuple[np.ndarray, dict]:
@@ -57,7 +63,8 @@ class ZeroForcingEqualizer():
         EqualizedGrid = np.zeros_like(EstimatedChannel, dtype=np.complex128)
         EffectiveVarNoise = np.zeros_like(EstimatedChannel, dtype=float)
         gain = np.zeros_like(EstimatedChannel, dtype=float)
-        for k in self.allocated_k:
+        print_H = []
+        for k in self.allocatedSubcarriers:
             for l in self.allocated_l:
                 H = EstimatedChannel[k, l]
                 Y = EstimatedGrid[k, l]
@@ -69,7 +76,10 @@ class ZeroForcingEqualizer():
                     EffectiveVarNoise[k,l] = np.inf
                 else:
                     EqualizedGrid[k,l] = Y / H
-                    EffectiveVarNoise[k,l] = meta["VarNoise"] / np.abs(H)**2
+                    EffectiveVarNoise[k,l] = meta["NoiseVar"] / np.abs(H)**2
+            print_H.append(np.abs(H)) 
+        print_H = np.sort(print_H)
+        # print(f"top 5 min absolute H: {print_H[:5]}")
 
         meta["EffectiveVarNoise"] = EffectiveVarNoise
         meta["gain"] = gain

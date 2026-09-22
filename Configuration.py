@@ -119,17 +119,32 @@ harqConfig = HARQConfig(
     rv_id=0
 )
 
+receiver01Config = ReceiverConfig(
+    maxLDPCIterations=10,
+    equalizerType=EQUALIZER.ZF,
+    channelEstimatorType=CHANNEL_ESTIMATOR.LS,
+)
+receiver02Config = ReceiverConfig(
+    maxLDPCIterations=10,
+    equalizerType=EQUALIZER.ZF,
+    channelEstimatorType=CHANNEL_ESTIMATOR.LMMSE,
+)
+receiver03Config = ReceiverConfig(
+    maxLDPCIterations=10,
+    equalizerType=EQUALIZER.MMSE,
+    channelEstimatorType=CHANNEL_ESTIMATOR.LS,
+)
+receiver04Config = ReceiverConfig(
+    maxLDPCIterations=10,
+    equalizerType=EQUALIZER.MMSE,
+    channelEstimatorType=CHANNEL_ESTIMATOR.LMMSE,
+)
+
 channelConfig = ChannelConfig(
     model=CHANNEL_MODEL.Rayleigh,
     velocity=15,
     carrierFrequency=2.5e9,
     delays_ns=[0, 100, 300],
-    delayPower_dB=[0, -3, -6]
-)
-
-receiverConfig = ReceiverConfig(
-    maxLDPCIterations=10,
-    equalizerType=EQUALIZER.MMSE,
-    channelEstimatorType=CHANNEL_ESTIMATOR.LMMSE,
+    delayPower_dB=[0, -5, -10]
 )
     

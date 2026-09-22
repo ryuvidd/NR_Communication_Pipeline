@@ -2,63 +2,70 @@ import numpy as np
 import logging
 
 class ResultsEvaluator():
-    def __init__(self, EsN0: list, nMC:int):
+    def __init__(self, EsN0: list, nMC:int, nConfigs: int):
         self.EsN0_dB = EsN0
         self.nMC = nMC
-        self.NMSE_dB = np.zeros(len(EsN0))
-        self.EVM_dB = np.zeros(len(EsN0))
-        self.PreLDPCCodedBER = np.zeros(len(EsN0))
-        self.TransportBlockBER = np.zeros(len(EsN0))
-        self.BLER = np.zeros(len(EsN0))
+        self.nConfigs = nConfigs
+        self.config_labels = ["LS-ZF", "LMMSE-ZF", "LS-MMSE", "LMMSE-MMSE"]
+        self.NMSE_dB = np.zeros((nConfigs,len(EsN0)))
+        self.EVM_dB = np.zeros((nConfigs,len(EsN0)))
+        self.PreLDPCCodedBER = np.zeros((nConfigs,len(EsN0)))
+        self.TransportBlockBER = np.zeros((nConfigs,len(EsN0)))
+        self.BLER = np.zeros((nConfigs,len(EsN0)))
 
-        self.channelEstimation_error_power = np.zeros((len(EsN0), nMC), dtype=np.float64)
-        self.channel_power = np.zeros((len(EsN0), nMC), dtype=np.float64)
-        self.EVM_error_power = np.zeros((len(EsN0), nMC), dtype=np.float64)
-        self.EVM_signal_power = np.zeros((len(EsN0), nMC), dtype=np.float64)
-        self.CodedBER = np.zeros((len(EsN0), nMC), dtype=np.float64)
-        self.TB_BER = np.zeros((len(EsN0), nMC), dtype=np.float64)
-        self.BLER_ = np.zeros((len(EsN0), nMC), dtype=np.float64)
+        self.channelEstimation_error_power = np.zeros((nConfigs, len(EsN0), nMC), dtype=np.float64)
+        self.channel_power = np.zeros((nConfigs, len(EsN0), nMC), dtype=np.float64)
+        self.EVM_error_power = np.zeros((nConfigs, len(EsN0), nMC), dtype=np.float64)
+        self.EVM_signal_power = np.zeros((nConfigs, len(EsN0), nMC), dtype=np.float64)
+        self.CodedBER = np.zeros((nConfigs, len(EsN0), nMC), dtype=np.float64)
+        self.TB_BER = np.zeros((nConfigs, len(EsN0), nMC), dtype=np.float64)
+        self.BLER_ = np.zeros((nConfigs, len(EsN0), nMC), dtype=np.float64)
     
-    def save_results(self, results: dict, EsnN0_idx: int, m: int):
+    def save_results(self, results: list[dict], EsnN0_idx: int, m: int):
         
-        self.channelEstimation_error_power[EsnN0_idx, m] = results["error_power"]
-        self.channel_power[EsnN0_idx, m] = results["channel_power"]
-        self.EVM_error_power[EsnN0_idx, m] = results["evm_error_power"]
-        self.EVM_signal_power[EsnN0_idx, m] = results["evm_signal_power"]
-        self.CodedBER[EsnN0_idx, m] = results["coded_ber"]
-        self.TB_BER[EsnN0_idx, m] = results["tb_ber"]
-        self.BLER_[EsnN0_idx, m] = results["bler"]
+        for i in range(self.nConfigs):
+            self.channelEstimation_error_power[i, EsnN0_idx, m] = results[i]["error_power"]
+            self.channel_power[i, EsnN0_idx, m] = results[i]["channel_power"]
+            self.EVM_error_power[i, EsnN0_idx, m] = results[i]["evm_error_power"]
+            self.EVM_signal_power[i, EsnN0_idx, m] = results[i]["evm_signal_power"]
+            self.CodedBER[i, EsnN0_idx, m] = results[i]["coded_ber"]
+            self.TB_BER[i, EsnN0_idx, m] = results[i]["tb_ber"]
+            self.BLER_[i, EsnN0_idx, m] = results[i]["bler"]
 
     def process(self, EsN0_idx: int):
-            
-        numerator = np.sum(self.channelEstimation_error_power[EsN0_idx])
-        denumerator = np.sum(self.channel_power[EsN0_idx])
-        self.NMSE_dB[EsN0_idx] = 10 * np.log10(numerator / denumerator)
+        
+        for i in range(self.nConfigs):
+            numerator = np.sum(self.channelEstimation_error_power[i,EsN0_idx])
+            denumerator = np.sum(self.channel_power[i,EsN0_idx])
+            self.NMSE_dB[i,EsN0_idx] = 10 * np.log10(numerator / denumerator)
 
-        numerator = np.sum(self.EVM_error_power[EsN0_idx])
-        denumerator = np.sum(self.EVM_signal_power[EsN0_idx])
-        evm = np.sqrt(numerator / denumerator)
-        self.EVM_dB[EsN0_idx] = 20 * np.log10(evm)
+            numerator = np.sum(self.EVM_error_power[i,EsN0_idx])
+            denumerator = np.sum(self.EVM_signal_power[i,EsN0_idx])
+            evm = np.sqrt(numerator / denumerator)
+            self.EVM_dB[i,EsN0_idx] = 20 * np.log10(evm)
 
-        self.PreLDPCCodedBER[EsN0_idx] = np.mean(self.CodedBER[EsN0_idx]) * 100
-        self.TransportBlockBER[EsN0_idx] = np.mean(self.TB_BER[EsN0_idx]) * 100
-        self.BLER[EsN0_idx] = np.mean(self.BLER_[EsN0_idx]) * 100
+            self.PreLDPCCodedBER[i,EsN0_idx] = np.mean(self.CodedBER[i,EsN0_idx]) * 100
+            self.TransportBlockBER[i,EsN0_idx] = np.mean(self.TB_BER[i,EsN0_idx]) * 100
+            self.BLER[i,EsN0_idx] = np.mean(self.BLER_[i,EsN0_idx]) * 100
 
-        logging.info(f"-- NMSE: {self.NMSE_dB[EsN0_idx]:.2f} dB")
-        logging.info(f"-- EVM: {self.EVM_dB[EsN0_idx]:.2f} dB")
-        logging.info(f"-- Coded BER: {self.PreLDPCCodedBER[EsN0_idx]:.2f} %")
-        logging.info(f"-- TB BER: {self.TransportBlockBER[EsN0_idx]:.2f} %")
-        logging.info(f"-- BLER: {self.BLER[EsN0_idx]:.2f}%\n")
+            logging.info(f"=== CONFIG: {self.config_labels[i]} ===")
+            logging.info(f"-- NMSE: {self.NMSE_dB[i,EsN0_idx]:.2f} dB")
+            logging.info(f"-- EVM: {self.EVM_dB[i,EsN0_idx]:.2f} dB")
+            logging.info(f"-- Coded BER: {self.PreLDPCCodedBER[i,EsN0_idx]:.2f} %")
+            logging.info(f"-- TB BER: {self.TransportBlockBER[i,EsN0_idx]:.2f} %")
+            logging.info(f"-- BLER: {self.BLER[i,EsN0_idx]:.2f}%\n")
     
     def logging_overall_results(self):
         logging.info("===== Overall Summary =====")
         for i,EsN0 in enumerate(self.EsN0_dB):
-            logging.info(f"SNR {EsN0} dB:")
-            logging.info(f"   NMSE {self.NMSE_dB[i]:.2f} dB")
-            logging.info(f"   EVM {self.EVM_dB[i]:.2f} dB")
-            logging.info(f"   Coded BER {self.PreLDPCCodedBER[i]:.2f} %")
-            logging.info(f"   TB BER {self.TransportBlockBER[i]:.2f} %")
-            logging.info(f"   BLER {self.BLER[i]:.2f}%\n")
+            logging.info(f"-- SNR {EsN0} dB --")
+            for k in range(self.nConfigs):
+                logging.info(f"      CONFIG: {self.config_labels[k]}")
+                logging.info(f"   NMSE {self.NMSE_dB[k,i]:.2f} dB")
+                logging.info(f"   EVM {self.EVM_dB[k,i]:.2f} dB")
+                logging.info(f"   Coded BER {self.PreLDPCCodedBER[k,i]:.2f} %")
+                logging.info(f"   TB BER {self.TransportBlockBER[k,i]:.2f} %")
+                logging.info(f"   BLER {self.BLER[k,i]:.2f}%\n")
 
 class Evaluator():
     def __init__(self, allocatedPDSCHSymbols, allocatedPRB):
