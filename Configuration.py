@@ -45,7 +45,7 @@ class ScramblingConfig:
 
 @dataclass
 class HARQConfig:
-    rv_id: int
+    rv_id: list[int]
 
 @dataclass
 class OFDMConfig:
@@ -116,7 +116,7 @@ scramblingConfig = ScramblingConfig(
 )
 
 harqConfig = HARQConfig(
-    rv_id=0
+    rv_id=[0,2,3,1]
 )
 
 receiver01Config = ReceiverConfig(

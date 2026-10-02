@@ -6,33 +6,80 @@ from EvaluationMetrics import *
 from Configuration import *
 
 class Simulator():
-    def __init__(self, configs: list[NRSystemConfig]):
+    def __init__(self, configs: list[NRSystemConfig], compare_RVs_flag: bool):
         config = configs[0]
         self.Transmitter = Transmitter(config)
         self.Channel = select_channel_model(config.channel)
-        self.Receiver01 = Receiver(configs[0])
-        self.Receiver02 = Receiver(configs[1])
-        self.Receiver03 = Receiver(configs[2])
-        self.Receiver04 = Receiver(configs[3])
-        self.Evaluators = Evaluator(config.pdsch.allocatedSymbols, config.bwp.allocatedPRB)
+        self.Receivers = []
+        if compare_RVs_flag:
+            self.numVariations = 4
+            self.Receivers.append(Receiver(configs[0]))
+        else:
+            self.numVariations = len(configs)
+            for i in range(self.numVariations):
+                self.Receivers.append(Receiver(configs[i]))
+        self.Evaluators = Evaluator(config.pdsch.allocatedSymbols, config.bwp.allocatedPRB, compare_RVs_flag)
+        self.RV_id = config.harq.rv_id
+        self.compare_RVs_flag = compare_RVs_flag
 
     def reset(self):
         self.Transmitter.HARQ_EncodedCodeBlocks = {}
-        self.Receiver01.RateRecoverer.HARQ_buffer = {}
-        self.Receiver02.RateRecoverer.HARQ_buffer = {}
-        self.Receiver03.RateRecoverer.HARQ_buffer = {}
-        self.Receiver04.RateRecoverer.HARQ_buffer = {}
+        for i in range(len(self.Receivers)):
+            self.Receivers[i].RateRecoverer.HARQ_buffer = {}
         NDI = not self.Transmitter.NDI
         return NDI
+    
+    def evaluate_results(self, EstimatedTransportBlocks, InformationData):
+        Estimateds = []
+        for i in range(self.numVariations):
+            Estimated_results = {
+                "Channel": self.Receivers[i].meta["EstimatedChannel"],
+                "QAMSymbols": self.Receivers[i].meta["EstimatedQAMSymbols"],
+                "LLRs": self.Receivers[i].meta["LLRs"],
+                "TransportBlock": EstimatedTransportBlocks[i]
+            }
+            Estimateds.append(Estimated_results)
+
+        GroundTruth = {
+            "Channel": self.Channel.ChannelFrequency,
+            "QAMSymbols": self.Transmitter.meta["QAMSymbols"],
+            "ScrambledBits": self.Transmitter.meta["ScrambledBits"],
+            "TransportBlock": InformationData[:self.Transmitter.meta["TBS"]]
+        }
+
+        results = []
+        for i in range(self.numVariations):
+            results.append(self.Evaluators.process(Estimateds[i], GroundTruth))
+        
+        return results
+    
+    def evaluate_results_RVs(self, EstimatedTransportBlocks, InformationData):
+        Estimateds = []
+        for i in range(self.numVariations):
+            Estimated_results = {
+                "TransportBlock": EstimatedTransportBlocks[i]
+            }
+            Estimateds.append(Estimated_results)
+
+        GroundTruth = {
+            "TransportBlock": InformationData[:self.Transmitter.meta["TBS"]]
+        }
+
+        results = []
+        for i in range(self.numVariations):
+            results.append(self.Evaluators.process(Estimateds[i], GroundTruth))
+        
+        return results
 
     def process(self, DEBUG_MODE: bool, EsN0_dB: float, HARQ_number: int) -> list[dict]:
         logging_level(DEBUG_MODE)
-        RV_id = [0]
         InformationData = np.random.randint(0, 2, size=100000, dtype=np.uint8)
         NDI = self.reset()
-        HARQ_ACKs = ["NACK"] * 4
+        HARQ_ACKs = ["NACK"] * self.numVariations
+        EstimatedTransportBlocks = [0] * self.numVariations
+        results = []
 
-        for rv_id in RV_id:
+        for rv_idx, rv_id in enumerate(self.RV_id):
             meta = {}
             TransmittedSymbols = self.Transmitter.process(InformationData, HARQ_number, NDI, rv_id)
             logging.debug("...................................")
@@ -50,55 +97,20 @@ class Simulator():
             meta["R_hh"] = self.Channel.R_hh
             meta["NoiseVar"] = NoiseVar
             logging.debug("...................................")
-            if HARQ_ACKs[0] == "NACK":
-                HARQ_ACKs[0], EstimatedTransportBlock01 = self.Receiver01.process(ReceivedSignal, HARQ_number, NDI, rv_id, meta)
-            if HARQ_ACKs[1] == "NACK":
-                HARQ_ACKs[1], EstimatedTransportBlock02 = self.Receiver02.process(ReceivedSignal, HARQ_number, NDI, rv_id, meta)
-            if HARQ_ACKs[2] == "NACK":
-                HARQ_ACKs[2], EstimatedTransportBlock03 = self.Receiver03.process(ReceivedSignal, HARQ_number, NDI, rv_id, meta)
-            if HARQ_ACKs[3] == "NACK":
-                HARQ_ACKs[3], EstimatedTransportBlock04 = self.Receiver04.process(ReceivedSignal, HARQ_number, NDI, rv_id, meta)
-            
-            if all(status == "ACK" for status in HARQ_ACKs):
-                break
+            if self.compare_RVs_flag:
+                HARQ_ACKs[rv_idx], EstimatedTransportBlocks[rv_idx] = self.Receivers[0].process(ReceivedSignal, HARQ_number, NDI, rv_id, meta)
+            else:
+                for i in range(self.numVariations):
+                    if HARQ_ACKs[i] == "NACK":
+                        HARQ_ACKs[i], EstimatedTransportBlocks[i] = self.Receivers[i].process(ReceivedSignal, HARQ_number, NDI, rv_id, meta)
+                
+                if all(status == "ACK" for status in HARQ_ACKs):
+                    break
         
-        Estimated01 = {
-            "Channel": self.Receiver01.meta["EstimatedChannel"],
-            "QAMSymbols": self.Receiver01.meta["EstimatedQAMSymbols"],
-            "LLRs": self.Receiver01.meta["LLRs"],
-            "TransportBlock": EstimatedTransportBlock01
-        }
-        Estimated02 = {
-            "Channel": self.Receiver02.meta["EstimatedChannel"],
-            "QAMSymbols": self.Receiver02.meta["EstimatedQAMSymbols"],
-            "LLRs": self.Receiver02.meta["LLRs"],
-            "TransportBlock": EstimatedTransportBlock02
-        }
-        Estimated03 = {
-            "Channel": self.Receiver03.meta["EstimatedChannel"],
-            "QAMSymbols": self.Receiver03.meta["EstimatedQAMSymbols"],
-            "LLRs": self.Receiver03.meta["LLRs"],
-            "TransportBlock": EstimatedTransportBlock03
-        }
-        Estimated04 = {
-            "Channel": self.Receiver04.meta["EstimatedChannel"],
-            "QAMSymbols": self.Receiver04.meta["EstimatedQAMSymbols"],
-            "LLRs": self.Receiver04.meta["LLRs"],
-            "TransportBlock": EstimatedTransportBlock04
-        }
-
-        GroundTruth = {
-            "Channel": self.Channel.ChannelFrequency,
-            "QAMSymbols": self.Transmitter.meta["QAMSymbols"],
-            "ScrambledBits": self.Transmitter.meta["ScrambledBits"],
-            "TransportBlock": InformationData[:self.Transmitter.meta["TBS"]]
-        }
-
-        results01 = self.Evaluators.process(Estimated01, GroundTruth)
-        results02 = self.Evaluators.process(Estimated02, GroundTruth)
-        results03 = self.Evaluators.process(Estimated03, GroundTruth)
-        results04 = self.Evaluators.process(Estimated04, GroundTruth)
-        results = [results01, results02, results03, results04]
+        if self.compare_RVs_flag:
+            results = self.evaluate_results_RVs(EstimatedTransportBlocks, InformationData)
+        else:
+            results = self.evaluate_results(EstimatedTransportBlocks, InformationData)
 
         return results
 
@@ -119,7 +131,7 @@ if __name__ == '__main__':
     EsN0_dB = 0
     HARQ_number = 0
 
-    ThisSimulator = Simulator([config])
+    ThisSimulator = Simulator([config], True)
     results = ThisSimulator.process(DEBUG_MODE, EsN0_dB, HARQ_number)
     if results[0]["bler"] == 0:
         logging.info(f"===== Transmission: Success =====")
