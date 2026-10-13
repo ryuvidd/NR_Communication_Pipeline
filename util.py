@@ -70,10 +70,10 @@ def plot_all_results(load_results_name: list[str], save_name: str):
     subplot_titles = ["Channel Estimation NMSE", "EVM", "Pre-LDPC Coded BER", "Transport Block BER", "BLER"]
     
     metric_idx = 0
-    fig, axes = plt.subplots(3, 2, figsize=(12, 12))
-    for i in range(3):
-        for j in range(2):
-            if (i,j) == (2,1):
+    fig, axes = plt.subplots(2, 3, figsize=(15, 8))
+    for i in range(2):
+        for j in range(3):
+            if (i,j) == (0,2):
                 axes[i,j].axis("off")
             else:
                 for k in range(nSimulations):

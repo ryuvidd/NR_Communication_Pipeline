@@ -122,14 +122,29 @@ class TB_BERCalculator():
     
 class CodedBERCalculator():
     def process(self, LLRs: list[np.ndarray], ScrambledBits: list[np.ndarray]):
-        hardDecisionLLRs = (LLRs[0] < 0).astype(np.uint8)
-        coded_ber = np.mean(hardDecisionLLRs != ScrambledBits[0])
+        if len(LLRs) == len(ScrambledBits):
+            nLayers = len(LLRs)
+        else: 
+            raise ValueError("Numbers of transmission layer do not match.")
+        
+        coded_ber = 0
+        for i in range(nLayers):
+            hardDecisionLLRs = (LLRs[i] < 0).astype(np.uint8)
+            coded_ber += np.mean(hardDecisionLLRs != ScrambledBits[i])
         return coded_ber
 
 class EVMCalculator():
     def process(self, EstimatedQAMSymbols: list[np.ndarray], QAMSymbols: list[np.ndarray]):
-        evm_error_power = np.sum(np.abs(EstimatedQAMSymbols[0] - QAMSymbols[0])**2)
-        evm_signal_power = np.sum(np.abs(QAMSymbols[0])**2)
+        if len(EstimatedQAMSymbols) == len(QAMSymbols):
+            nLayers = len(EstimatedQAMSymbols)
+        else: 
+            raise ValueError("Numbers of transmission layer do not match.")
+        
+        evm_error_power = 0
+        evm_signal_power = 0
+        for i in range(nLayers):                
+            evm_error_power += np.sum(np.abs(EstimatedQAMSymbols[i] - QAMSymbols[i])**2)
+            evm_signal_power += np.sum(np.abs(QAMSymbols[i])**2)
         return evm_error_power, evm_signal_power
 
 class ChannelEstimationNMSE():
